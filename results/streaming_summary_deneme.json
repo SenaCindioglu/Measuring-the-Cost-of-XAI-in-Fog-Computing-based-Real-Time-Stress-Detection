@@ -1,0 +1,122 @@
+{
+  "preprocessing": {
+    "mean_ms": 0.1885151489578346,
+    "median_ms": 0.18199995975010097,
+    "p95_ms": 0.20610002684406936,
+    "std_ms": 0.0430639821984351,
+    "min_ms": 0.16950001008808613,
+    "max_ms": 0.8097999962046742
+  },
+  "tensor_prep": {
+    "mean_ms": 0.045493702092108894,
+    "median_ms": 0.04370001261122525,
+    "p95_ms": 0.053419990581460276,
+    "std_ms": 0.01712175138844103,
+    "min_ms": 0.038300000596791506,
+    "max_ms": 0.5853999755345285
+  },
+  "inference": {
+    "mean_ms": 1.1369787235843374,
+    "median_ms": 1.0900000052060932,
+    "p95_ms": 1.3307500077644359,
+    "std_ms": 0.7204204354658257,
+    "min_ms": 0.9057999996002764,
+    "max_ms": 23.857799998950213
+  },
+  "postprocessing": {
+    "mean_ms": 0.03155506389374112,
+    "median_ms": 0.029999995604157448,
+    "p95_ms": 0.03765999572351574,
+    "std_ms": 0.006708465967855563,
+    "min_ms": 0.026900001103058457,
+    "max_ms": 0.10990002192556858
+  },
+  "total": {
+    "mean_ms": 1.2545905526271683,
+    "median_ms": 1.2033999955747277,
+    "p95_ms": 1.4719600032549351,
+    "std_ms": 0.727339096054484,
+    "min_ms": 1.0130000009667128,
+    "max_ms": 24.05059998272918
+  },
+  "cpu_percent": {
+    "mean": 0.0,
+    "max": 0.0
+  },
+  "rss_mb": {
+    "mean": 240.90815159574467,
+    "max": 251.75390625
+  },
+  "n_windows": 1175,
+  "n_warmup_excluded": 30,
+  "classification": {
+    "n_labeled_windows": 1175,
+    "accuracy": 0.7676595744680851,
+    "stress_precision": 0.4946236559139785,
+    "stress_recall": 0.6840148698884758,
+    "stress_f1": 0.5741029641185648,
+    "confusion": {
+      "tn": 718,
+      "fp": 188,
+      "fn": 85,
+      "tp": 184
+    },
+    "stress_ratio_true": 0.22893617021276597,
+    "stress_ratio_pred": 0.31659574468085105
+  },
+  "subjects": [
+    "S11",
+    "S14"
+  ],
+  "run_config": {
+    "model": "wesad_best_model_f32-128_k9.pt",
+    "architecture": {
+      "num_channels": 14,
+      "filters": [
+        32,
+        128
+      ],
+      "kernel_size": 9,
+      "conv_dropout": 0.2,
+      "fc_dropout": 0.5,
+      "depth": 2,
+      "num_params": 49890
+    },
+    "checkpoint_meta": {
+      "val_subjects": [
+        "S11",
+        "S14"
+      ],
+      "train_subjects": [
+        "S2",
+        "S16",
+        "S7",
+        "S10",
+        "S4",
+        "S3",
+        "S17",
+        "S6",
+        "S9",
+        "S13",
+        "S15",
+        "S5",
+        "S8"
+      ],
+      "best_val_f1": 0.9386203979456768,
+      "num_params": 49890
+    },
+    "subjects": [
+      "S11",
+      "S14"
+    ],
+    "norm_mode": "running",
+    "tick_ms": 500,
+    "warmup_windows": 15,
+    "device": "cpu",
+    "window_size": 640,
+    "hop_size": 320,
+    "window_latency_s": 10.0,
+    "hop_latency_s": 5.0,
+    "seed": 42
+  }
+}

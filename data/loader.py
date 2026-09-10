@@ -1,7 +1,7 @@
 """
 data/loader.py
 ==============
-WESAD .pkl dosyalarindan ham wrist+chest sinyallerini (14 kanal) okur ve
+WESAD .pkl dosyalarindan ham chest+wrist sinyallerini (14 kanal) okur ve
 target_rate'e resample eder. Pencereleme YAPMAZ -- ham, surekli zaman
 serisi dondurur. Pencereleme offline egitimde data/windowing.py'de,
 streaming'de streaming/buffer.py'de yapilir.
@@ -30,8 +30,22 @@ def resample_signal(signal, original_rate, target_rate):
 
 def load_wesad_subject(subject_id, data_path, target_rate):
     """
-    Tek bir subject icin wrist(6) + chest(8) = 14 kanal ham sinyali ve
+    Tek bir subject icin chest(8) + wrist(6) = 14 kanal ham sinyali ve
     etiketleri target_rate'e resample edilmis halde dondurur.
+
+    KANAL SIRASI KRITIKTIR -- egitim scriptindeki (wesad_save_best_model.py)
+    sira ile BIREBIR ayni olmak zorundadir, aksi halde model karisik kanal
+    aliyor ve dogruluk cokuyor:
+        0-2  chest ACC (x, y, z)   700 Hz
+        3    chest ECG             700 Hz
+        4    chest EMG             700 Hz
+        5    chest EDA             700 Hz
+        6    chest Temp            700 Hz
+        7    chest Resp            700 Hz
+        8-10 wrist ACC (x, y, z)    32 Hz
+        11   wrist BVP              64 Hz
+        12   wrist EDA               4 Hz
+        13   wrist TEMP              4 Hz
 
     Returns
     -------
@@ -48,13 +62,8 @@ def load_wesad_subject(subject_id, data_path, target_rate):
         with open(subject_path, 'rb') as f:
             data = pickle.load(f, encoding='latin1')
 
-        wrist = data['signal']['wrist']
         chest = data['signal']['chest']
-
-        acc_w  = wrist['ACC']
-        bvp    = wrist['BVP'].reshape(-1, 1)
-        eda_w  = wrist['EDA'].reshape(-1, 1)
-        temp_w = wrist['TEMP'].reshape(-1, 1)
+        wrist = data['signal']['wrist']
 
         acc_c  = chest['ACC']
         ecg    = chest['ECG'].reshape(-1, 1)
@@ -62,6 +71,11 @@ def load_wesad_subject(subject_id, data_path, target_rate):
         eda_c  = chest['EDA'].reshape(-1, 1)
         temp_c = chest['Temp'].reshape(-1, 1)
         resp   = chest['Resp'].reshape(-1, 1)
+
+        acc_w  = wrist['ACC']
+        bvp    = wrist['BVP'].reshape(-1, 1)
+        eda_w  = wrist['EDA'].reshape(-1, 1)
+        temp_w = wrist['TEMP'].reshape(-1, 1)
 
         raw_labels = data['label'].astype(int)
         label_700hz_len = len(raw_labels)
@@ -71,19 +85,20 @@ def load_wesad_subject(subject_id, data_path, target_rate):
         ).astype(int)
         labels_resampled = raw_labels[label_indices]
 
-        acc_w_r  = resample_signal(acc_w,  32,  target_rate)
-        bvp_r    = resample_signal(bvp,    64,  target_rate)
-        eda_w_r  = resample_signal(eda_w,  4,   target_rate)
-        temp_w_r = resample_signal(temp_w, 4,   target_rate)
         acc_c_r  = resample_signal(acc_c,  700, target_rate)
         ecg_r    = resample_signal(ecg,    700, target_rate)
         emg_r    = resample_signal(emg,    700, target_rate)
         eda_c_r  = resample_signal(eda_c,  700, target_rate)
         temp_c_r = resample_signal(temp_c, 700, target_rate)
         resp_r   = resample_signal(resp,   700, target_rate)
+        acc_w_r  = resample_signal(acc_w,  32,  target_rate)
+        bvp_r    = resample_signal(bvp,    64,  target_rate)
+        eda_w_r  = resample_signal(eda_w,  4,   target_rate)
+        temp_w_r = resample_signal(temp_w, 4,   target_rate)
 
-        all_signals = [acc_w_r, bvp_r, eda_w_r, temp_w_r,
-                       acc_c_r, ecg_r, emg_r, eda_c_r, temp_c_r, resp_r]
+        # SIRA: chest (8) once, wrist (6) sonra -- egitimdekiyle birebir
+        all_signals = [acc_c_r, ecg_r, emg_r, eda_c_r, temp_c_r, resp_r,
+                       acc_w_r, bvp_r, eda_w_r, temp_w_r]
         min_len = min(min(len(s) for s in all_signals), len(labels_resampled))
 
         X = np.concatenate([s[:min_len] for s in all_signals], axis=1)  # (T, 14)

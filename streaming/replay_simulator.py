@@ -20,12 +20,13 @@ import torch
 
 from data.loader import load_wesad_subject
 from data.windowing import filter_valid_labels, labels_to_binary
-from data.normalization import apply_normalization
+from data.normalization import apply_normalization, RunningNormalizer
 from streaming.buffer import RollingBuffer
 
 
 def replay_subject(subject_id, model, mean, std, cfg, profiler,
-                    tick_ms=500, warmup_windows=15, realtime=False):
+                    tick_ms=500, warmup_windows=15, realtime=False,
+                    norm_mode='fixed'):
     """
     Parameters
     ----------
@@ -37,19 +38,31 @@ def replay_subject(subject_id, model, mean, std, cfg, profiler,
     realtime : True ise tick'ler arasina gercek time.sleep() eklenir
                (demo/gercek-zamanli gosterim icin; latency olcumunu
                etkilemez cunku sleep suresi ayri tutulur)
+    norm_mode : 'fixed'   -> verilen sabit mean/std kullanilir (deployment gercegi)
+                'running' -> her tick'te guncellenen NEDENSEL mean/std kullanilir;
+                             offline egitimdeki subject-bazli z-score'un gelecege
+                             sizmayan karsiligi. Guncelleme maliyeti pencerenin
+                             'preprocessing' suresine eklenir.
     """
-    print(f"\n>> Replay basliyor: {subject_id} (tick={tick_ms}ms, warmup={warmup_windows} pencere)")
+    if norm_mode not in ('fixed', 'running'):
+        raise ValueError(f"Bilinmeyen norm_mode: {norm_mode} ('fixed' veya 'running')")
+
+    print(f"\n>> Replay basliyor: {subject_id} (tick={tick_ms}ms, "
+          f"warmup={warmup_windows} pencere, norm={norm_mode})")
 
     X_raw, y_raw = load_wesad_subject(subject_id, cfg.DATA_PATH, cfg.TARGET_RATE)
     if X_raw is None:
         print(f"   x {subject_id} yuklenemedi, atlaniyor.")
-        return
+        return 0
 
     X_raw, y_raw = filter_valid_labels(X_raw, y_raw, cfg.VALID_LABELS)
     y_bin = labels_to_binary(y_raw) if cfg.BINARY else y_raw
 
     tick_samples = max(1, int(cfg.TARGET_RATE * tick_ms / 1000))
     buffer = RollingBuffer(cfg.NUM_CHANNELS, cfg.WINDOW_SIZE, cfg.HOP_SIZE)
+
+    runner = RunningNormalizer(cfg.NUM_CHANNELS) if norm_mode == 'running' else None
+    pending_norm_ms = 0.0  # tick basina odenen istatistik guncelleme maliyeti
 
     n_total = len(X_raw)
     window_count = 0
@@ -58,6 +71,11 @@ def replay_subject(subject_id, model, mean, std, cfg, profiler,
         chunk = X_raw[start:start + tick_samples]
         if len(chunk) == 0:
             continue
+
+        if runner is not None:
+            _t0 = time.perf_counter()
+            runner.update(chunk)
+            pending_norm_ms += (time.perf_counter() - _t0) * 1000.0
 
         window_ready = buffer.push(chunk)
 
@@ -80,10 +98,18 @@ def replay_subject(subject_id, model, mean, std, cfg, profiler,
         true_label = int(np.bincount(y_bin[window_start_idx:end_idx].astype(int)).argmax()) \
             if end_idx > window_start_idx else -1
 
-        with profiler.record_window(is_warmup=is_warmup) as rec:
+        win_mean, win_std = (mean, std) if runner is None else (runner.mean, runner.std)
+
+        with profiler.record_window(is_warmup=is_warmup, subject=subject_id) as rec:
+            # 'running' modda tick basina odenen guncelleme maliyetini de
+            # preprocessing'e yaz ki latency raporu durustce tam maliyeti gostersin
+            if pending_norm_ms:
+                rec.add_stage_ms('preprocessing', pending_norm_ms)
+                pending_norm_ms = 0.0
+
             with rec.stage('preprocessing'):
-                # sabit istatistiklerle normalizasyon (T, C) -> (T, C)
-                norm_window = apply_normalization(raw_window, mean, std)
+                # (T, C) -> (T, C), sabit ya da nedensel istatistiklerle
+                norm_window = apply_normalization(raw_window, win_mean, win_std)
 
             with rec.stage('tensor_prep'):
                 x = norm_window.transpose(1, 0)  # (C, T)
@@ -103,4 +129,5 @@ def replay_subject(subject_id, model, mean, std, cfg, profiler,
             rec.set_result(true_label=true_label, pred_label=pred, confidence=confidence)
 
     print(f"   OK {subject_id}: {window_count} pencere islendi "
-          f"({warmup_windows} tanesi warm-up olarak haric tutuldu)")
+          f"({min(warmup_windows, window_count)} tanesi warm-up olarak haric tutuldu)")
+    return window_count
