@@ -13,6 +13,7 @@ Bagimlilik: psutil (Colab'da genelde zaten kurulu; degilse
 import time
 import json
 import os
+import threading
 from contextlib import contextmanager
 
 import numpy as np
@@ -71,11 +72,59 @@ class _WindowRecorder:
         self.profiler._commit(self)
 
 
+class _ResourceSampler(threading.Thread):
+    """
+    CPU ve bellek kullanimini SABIT ARALIKLARLA, ayri bir iplikte orneklemeyi
+    yapar.
+
+    Neden ayri iplik: psutil'in cpu_percent'i iki cagri arasinda gecen sureye
+    bakar. Pencere basina, aralik vermeden cagrildiginda arka arkaya gelen
+    cagrilar arasinda neredeyse hic zaman gecmedigi icin surekli 0 okur.
+    Sabit araliklarla orneklemek gercek yuku verir.
+    """
+
+    def __init__(self, proc, interval=0.1):
+        super().__init__(daemon=True)
+        self.proc = proc
+        self.interval = interval
+        self.cpu = []
+        self.rss = []
+        self._stop_evt = threading.Event()
+
+    def run(self):
+        self.proc.cpu_percent(interval=None)  # ilk cagri referans noktasi
+        while not self._stop_evt.wait(self.interval):
+            try:
+                self.cpu.append(self.proc.cpu_percent(interval=None))
+                self.rss.append(self.proc.memory_info().rss / (1024 ** 2))
+            except Exception:
+                break
+
+    def stop(self):
+        self._stop_evt.set()
+        self.join(timeout=1.0)
+
+
 class LatencyProfiler:
-    def __init__(self, device_type='cpu'):
+    def __init__(self, device_type='cpu', sample_interval=0.1):
         self.device_type = device_type
         self._records = []  # her pencere icin dict
         self._proc = psutil.Process(os.getpid()) if _HAS_PSUTIL else None
+        self._sampler = None
+        self._sample_interval = sample_interval
+
+    # ------------------------------------------------------------------
+    # Kaynak orneklemesi
+    # ------------------------------------------------------------------
+
+    def start_sampling(self):
+        if self._proc is not None and self._sampler is None:
+            self._sampler = _ResourceSampler(self._proc, self._sample_interval)
+            self._sampler.start()
+
+    def stop_sampling(self):
+        if self._sampler is not None:
+            self._sampler.stop()
 
     @contextmanager
     def record_window(self, is_warmup=False, subject=None):
@@ -95,7 +144,6 @@ class LatencyProfiler:
             **rec.stage_times,
         }
         if self._proc is not None:
-            entry['cpu_percent'] = self._proc.cpu_percent(interval=None)
             entry['rss_mb'] = self._proc.memory_info().rss / (1024 ** 2)
         if _HAS_TORCH and self.device_type == 'cuda' and torch.cuda.is_available():
             entry['gpu_mem_mb'] = torch.cuda.memory_allocated() / (1024 ** 2)
@@ -111,7 +159,7 @@ class LatencyProfiler:
             return {}
 
         skip_keys = ('subject', 'is_warmup', 'true_label', 'pred_label',
-                     'confidence', 'cpu_percent', 'rss_mb', 'gpu_mem_mb')
+                     'confidence', 'rss_mb', 'gpu_mem_mb')
         stage_names = [k for k in records[0].keys() if k not in skip_keys]
 
         summary = {}
@@ -123,14 +171,32 @@ class LatencyProfiler:
                 'mean_ms': float(values.mean()),
                 'median_ms': float(np.median(values)),
                 'p95_ms': float(np.percentile(values, 95)),
+                'p99_ms': float(np.percentile(values, 99)),
                 'std_ms': float(values.std()),
                 'min_ms': float(values.min()),
                 'max_ms': float(values.max()),
             }
 
-        if 'cpu_percent' in records[0]:
-            cpu_vals = np.array([r['cpu_percent'] for r in records])
-            summary['cpu_percent'] = {'mean': float(cpu_vals.mean()), 'max': float(cpu_vals.max())}
+        # --- jitter: ardisik pencereler arasindaki sure degisimi ---
+        # RFC 3550'deki tanimla ayni mantik: ardisik gecikmelerin mutlak farki.
+        # std ile birlikte verilir cunku makalelerde ikisi de "jitter" diye gecer.
+        tot = np.array([r['total'] for r in records if 'total' in r])
+        if len(tot) > 1:
+            summary['jitter'] = {
+                'mean_abs_delta_ms': float(np.abs(np.diff(tot)).mean()),
+                'std_ms': float(tot.std()),
+                'p95_abs_delta_ms': float(np.percentile(np.abs(np.diff(tot)), 95)),
+            }
+
+        if self._sampler is not None and self._sampler.cpu:
+            cpu_vals = np.array(self._sampler.cpu)
+            summary['cpu_percent'] = {
+                'mean': float(cpu_vals.mean()),
+                'max': float(cpu_vals.max()),
+                'p95': float(np.percentile(cpu_vals, 95)),
+                'n_samples': int(len(cpu_vals)),
+                'interval_s': self._sample_interval,
+            }
         if 'rss_mb' in records[0]:
             rss_vals = np.array([r['rss_mb'] for r in records])
             summary['rss_mb'] = {'mean': float(rss_vals.mean()), 'max': float(rss_vals.max())}
@@ -183,8 +249,13 @@ class LatencyProfiler:
                 print(f"   {stage:>15}: mean={st['mean_ms']:.3f}ms  "
                       f"median={st['median_ms']:.3f}ms  p95={st['p95_ms']:.3f}ms  "
                       f"std={st['std_ms']:.3f}ms")
+        if 'jitter' in s:
+            j = s['jitter']
+            print(f"   {'jitter':>15}: mean|delta|={j['mean_abs_delta_ms']:.3f}ms  "
+                  f"std={j['std_ms']:.3f}ms  p95|delta|={j['p95_abs_delta_ms']:.3f}ms")
         if 'cpu_percent' in s:
-            print(f"   {'CPU %':>15}: mean={s['cpu_percent']['mean']:.1f}  max={s['cpu_percent']['max']:.1f}")
+            print(f"   {'CPU %':>15}: mean={s['cpu_percent']['mean']:.1f}  "
+                  f"max={s['cpu_percent']['max']:.1f}  ({s['cpu_percent']['n_samples']} ornek)")
         if 'rss_mb' in s:
             print(f"   {'RAM (MB)':>15}: mean={s['rss_mb']['mean']:.1f}  max={s['rss_mb']['max']:.1f}")
         if 'gpu_mem_mb' in s:

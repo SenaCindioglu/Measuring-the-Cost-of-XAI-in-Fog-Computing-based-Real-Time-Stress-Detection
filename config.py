@@ -82,6 +82,25 @@ class Config:
     DEFAULT_TICK_MS = 500        # buffer'a her seferinde kac ms'lik veri eklenecek
     DEFAULT_WARMUP_WINDOWS = 15  # olcume dahil edilmeyecek ilk pencere sayisi
 
+    # PyTorch CPU is parcacigi sayisi.
+    #
+    # benchmark_runs.py ile GERCEK pipeline uzerinde, 4 tur donusumlu kosuyla
+    # (S11, nedensel normalizasyon) olculen degerler:
+    #     iplik   p50      p95      tekrarlar arasi yayilim   CPU
+    #       1    3.397ms  4.980ms          %2.9               %91
+    #       2    3.933ms  5.774ms         %14.7               %93
+    #       4    3.684ms  5.508ms         %10.7              %103
+    #
+    # Medyanlar arasindaki fark (%15.8) tekrarlar arasi yayilimla ayni
+    # mertebede, yani hiz farki ayirt edilemiyor. Varsayilanin 1 olmasinin
+    # gerekcesi hiz degil KARARLILIK: tek iplikte olcum bes kat daha az
+    # oynuyor, ayrica giyilebilir/gomulu dagitim senaryosuna en yakin olan bu.
+    #
+    # UYARI: izole mikro-benchmark (ayni tensoru tekrar tekrar model'e vermek)
+    # yaniltici sonuc verir; iplik sayisi kararini her zaman tam pipeline
+    # uzerinde, donusumlu tekrarlarla ver.
+    DEFAULT_THREADS = 1
+
     # Normalizasyon modu:
     #   'fixed'   -> train subjectlerinden hesaplanmis sabit mean/std (deployment gercegi)
     #   'running' -> o ana kadar gorulen veriden nedensel (causal) mean/std;

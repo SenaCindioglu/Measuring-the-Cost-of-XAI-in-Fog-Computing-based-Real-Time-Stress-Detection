@@ -26,6 +26,8 @@ import argparse
 import json
 import os
 
+import torch
+
 from config import config
 from models.temporal_cnn import load_checkpoint
 from data.normalization import load_stats, ensure_fixed_stats
@@ -82,8 +84,17 @@ def main():
                         help="Haric tutulacak ilk pencere sayisi")
     parser.add_argument('--realtime', action='store_true',
                         help="Tick'ler arasina gercek time.sleep() ekle (demo amacli)")
+    parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS,
+                        help="PyTorch CPU is parcacigi sayisi. Kucuk modelde fazla is "
+                             "parcacigi senkronizasyon yuzunden YAVASLATIR; varsayilan 1.")
     parser.add_argument('--tag', type=str, default='run', help="Cikti dosya isimlerine eklenecek etiket")
     args = parser.parse_args()
+
+    # Olcumun tekrarlanabilir olmasi icin is parcacigi sayisi SABITLENIR.
+    # Bu model 49.890 parametreli; cok iplikli calistirmada is bolusturme
+    # maliyeti hesabin kendisinden buyuk oluyor ve olcum oynuyor.
+    if args.threads and args.threads > 0:
+        torch.set_num_threads(args.threads)
 
     if not os.path.exists(args.model):
         raise FileNotFoundError(f"Checkpoint bulunamadi: {args.model}")
@@ -103,6 +114,7 @@ def main():
     print(f"Normalizasyon: {args.norm_mode}")
     print(f"Tick         : {args.tick_ms}ms | Warmup: {args.warmup_windows} pencere | "
           f"Realtime sleep: {args.realtime}")
+    print(f"Is parcacigi : {torch.get_num_threads()} (torch) / {torch.get_num_interop_threads()} (interop)")
     print("=" * 70)
 
     warn_on_leakage(args.subject, meta)
@@ -115,12 +127,14 @@ def main():
         mean, std = None, None
 
     profiler = LatencyProfiler(device_type=cfg.DEVICE.type)
+    profiler.start_sampling()
 
     for subj in args.subject:
         replay_subject(subj, model, mean, std, cfg, profiler,
                        tick_ms=args.tick_ms, warmup_windows=args.warmup_windows,
                        realtime=args.realtime, norm_mode=args.norm_mode)
 
+    profiler.stop_sampling()
     profiler.print_summary(exclude_warmup=True)
 
     # Calistirma kosullarini ozete gom ki JSON tek basina yorumlanabilsin
@@ -134,6 +148,7 @@ def main():
         'tick_ms': args.tick_ms,
         'warmup_windows': args.warmup_windows,
         'device': str(cfg.DEVICE),
+        'torch_threads': torch.get_num_threads(),
         'window_size': cfg.WINDOW_SIZE,
         'hop_size': cfg.HOP_SIZE,
         'window_latency_s': cfg.WINDOW_DURATION,

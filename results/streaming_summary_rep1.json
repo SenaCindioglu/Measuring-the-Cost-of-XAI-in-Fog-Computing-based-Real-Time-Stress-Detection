@@ -1,0 +1,131 @@
+{
+  "preprocessing": {
+    "mean_ms": 0.5331713214833685,
+    "median_ms": 0.4495001048780978,
+    "p95_ms": 0.8913000172469765,
+    "std_ms": 0.26622876774684096,
+    "min_ms": 0.25180005468428135,
+    "max_ms": 4.390200017951429
+  },
+  "tensor_prep": {
+    "mean_ms": 0.12833438318302023,
+    "median_ms": 0.1058999914675951,
+    "p95_ms": 0.18984999042004344,
+    "std_ms": 0.12960794211383875,
+    "min_ms": 0.059699988923966885,
+    "max_ms": 2.249700017273426
+  },
+  "inference": {
+    "mean_ms": 2.613972681871754,
+    "median_ms": 2.368799992837012,
+    "p95_ms": 3.7772299896460027,
+    "std_ms": 1.0418808557542925,
+    "min_ms": 1.5771000180393457,
+    "max_ms": 23.56040000449866
+  },
+  "postprocessing": {
+    "mean_ms": 0.08470774548960493,
+    "median_ms": 0.0700999516993761,
+    "p95_ms": 0.13944001402705905,
+    "std_ms": 0.07704560878614965,
+    "min_ms": 0.041199964471161366,
+    "max_ms": 1.3438999885693192
+  },
+  "total": {
+    "mean_ms": 3.401098552883226,
+    "median_ms": 3.112899896223098,
+    "p95_ms": 4.7906200052239,
+    "std_ms": 1.1765905831398513,
+    "min_ms": 2.1677999175153673,
+    "max_ms": 25.36059997510165
+  },
+  "jitter": {
+    "mean_abs_delta_ms": 0.7095626077227599,
+    "std_ms": 1.1765905831398513,
+    "p95_abs_delta_ms": 2.0890999963739865
+  },
+  "cpu_percent": {
+    "mean": 91.02892561983471,
+    "max": 114.7,
+    "p95": 104.8,
+    "n_samples": 121,
+    "interval_s": 0.1
+  },
+  "rss_mb": {
+    "mean": 226.94051861702127,
+    "max": 246.1484375
+  },
+  "n_windows": 1175,
+  "n_warmup_excluded": 30,
+  "classification": {
+    "n_labeled_windows": 1175,
+    "accuracy": 0.7676595744680851,
+    "stress_precision": 0.4946236559139785,
+    "stress_recall": 0.6840148698884758,
+    "stress_f1": 0.5741029641185648,
+    "confusion": {
+      "tn": 718,
+      "fp": 188,
+      "fn": 85,
+      "tp": 184
+    },
+    "stress_ratio_true": 0.22893617021276597,
+    "stress_ratio_pred": 0.31659574468085105
+  },
+  "subjects": [
+    "S11",
+    "S14"
+  ],
+  "run_config": {
+    "model": "wesad_best_model_f32-128_k9.pt",
+    "architecture": {
+      "num_channels": 14,
+      "filters": [
+        32,
+        128
+      ],
+      "kernel_size": 9,
+      "conv_dropout": 0.2,
+      "fc_dropout": 0.5,
+      "depth": 2,
+      "num_params": 49890
+    },
+    "checkpoint_meta": {
+      "val_subjects": [
+        "S11",
+        "S14"
+      ],
+      "train_subjects": [
+        "S2",
+        "S16",
+        "S7",
+        "S10",
+        "S4",
+        "S3",
+        "S17",
+        "S6",
+        "S9",
+        "S13",
+        "S15",
+        "S5",
+        "S8"
+      ],
+      "best_val_f1": 0.9386203979456768,
+      "num_params": 49890
+    },
+    "subjects": [
+      "S11",
+      "S14"
+    ],
+    "norm_mode": "running",
+    "tick_ms": 500,
+    "warmup_windows": 15,
+    "device": "cpu",
+    "torch_threads": 1,
+    "window_size": 640,
+    "hop_size": 320,
+    "window_latency_s": 10.0,
+    "hop_latency_s": 5.0,
+    "seed": 42
+  }
+}
