@@ -173,3 +173,77 @@ Sınıflandırma:
 | Offline (subject-bazlı norm, sızıntılı) | 0.9361 | — (weighted F1 = 0.9386) |
 | Streaming `running` | 0.7677 | 0.5741 |
 | Streaming `fixed` | 0.6996 | 0.4676 |
+
+---
+
+## Ölçüm metodolojisi (Aşama 1)
+
+Tek bir koşunun sonucu bu makinede güvenilir değil. Ölçülen davranış: aynı
+yapılandırma arka arkaya koşulduğunda değerler yukarı kayıyor (işlemci frekans
+ölçeklemesi), ve iş parçacığı sayısı 1/2/4 arasında dönüşümlü koşulduğunda
+aradaki fark koşudan koşuya olan yayılımın altında kalıyor.
+
+Bu yüzden gecikme sayıları **tekrarlı ve dönüşümlü** ölçülür:
+
+```bash
+python benchmark_runs.py --subject S11 --repeat 4 --threads 1 2 4 --tag thread_sweep
+python benchmark_runs.py --subject S11 --repeat 4 --pipeline prepared native --tag pipeline_cmp
+```
+
+Birden fazla yapılandırma verilirse koşular dönüşümlü sırada yapılır (tur 1:
+A, B / tur 2: A, B ...), böylece ısınma kayması hepsine eşit dağılır.
+
+**İki ayrı dağılım vardır, karıştırılmamalı:**
+
+| | Ne ölçer | Nereye yazılır |
+|---|---|---|
+| Koşu içi dağılım | bir koşudaki 1000+ pencerenin p50/p95/p99'u | sistemin en kötü durum davranışı |
+| Koşu arası yayılım | aynı deneyi tekrarlayınca medyanın oynaması | ölçümün güven aralığı |
+
+İş parçacığı sayısı bu iş yükünde belirleyici değil. Varsayılanın 1 olmasının
+gerekçesi hız değil kararlılık: tek iplikte ölçüm beş kat daha az oynuyor
+(yayılım %2.9, diğerlerinde %11-15). İzole mikro-benchmark yanıltıcıdır, karar
+her zaman tam pipeline üzerinde verilmelidir.
+
+## İki pipeline yolu (Aşama 2)
+
+`--pipeline` bayrağı, yeniden örneklemenin nerede yapıldığını belirler.
+
+| Yol | Sinyal nasıl gelir | Yeniden örnekleme |
+|---|---|---|
+| `prepared` | tüm kayıt replay'den önce 64 Hz'e indirilmiş | ölçüm **dışında** |
+| `native` (varsayılan) | her sensör kendi hızında (göğüs 700 Hz, bilek 32/64/4 Hz) | her pencerede, sunucuda, **ölçülür** |
+
+Gerçek bir sistemde sensör ham hızında veri gönderir ve indirgeme sunucuda
+yapılır, yani `native` gerçekçi olan yoldur. `prepared` eski sonuçlarla
+karşılaştırma için duruyor.
+
+**Ölçülen fark** (S11, 4 tur dönüşümlü, tek iplik, koşu içi medyanların medyanı):
+
+| Yol | resampling | preprocessing | inference | toplam |
+|---|---|---|---|---|
+| `prepared` | — | 0.580 ms | 2.969 ms | 3.971 ms |
+| `native` | 1.573 ms | 0.252 ms | 3.039 ms | 5.502 ms |
+
+Yeniden örnekleme tek başına toplamın yaklaşık %29'u, yani çıkarımdan sonraki
+en pahalı aşama. Aradaki %38.6'lık fark, koşular arası yayılımın (%9.4) çok
+üstünde olduğu için gerçek.
+
+**Doğruluk korunuyor.** Pencere başına yeniden örnekleme, tüm sinyali bir kerede
+indirmekle birebir aynı sonucu vermez (kenar etkisi), ama fark ölçülemez
+düzeyde (S11 + S14, nedensel normalizasyon):
+
+| Yol | Doğruluk | Stres F1 | TN / FP / FN / TP |
+|---|---|---|---|
+| `prepared` | 0.7677 | 0.5741 | 718 / 188 / 85 / 184 |
+| `native` | 0.7674 | 0.5732 | 720 / 187 / 87 / 184 |
+
+**Etiketleme farkı.** `prepared` yolu geçersiz etiketli örnekleri sinyalden
+atıp kalanları birleştiriyor; bu zamanda atlama demek ve gerçek zamanlı bir
+sistemde mümkün değil. `native` yolunda zaman kesintisiz akar, çoğunluk etiketi
+geçersiz olan pencereler yalnızca raporlama dışında bırakılır.
+
+**Bant genişliği.** 500 ms'lik bir tick'te ham hızda 11 536 bayt taşınır, 64 Hz'e
+indirilmiş halde 1 792 bayt. Yani indirgemeyi sunucuda yapmak ağdan 6.4 kat
+fazla veri geçirmek demektir. Bu, Aşama 3'teki edge/fog yerleşim kararının
+sayısal dayanağıdır.

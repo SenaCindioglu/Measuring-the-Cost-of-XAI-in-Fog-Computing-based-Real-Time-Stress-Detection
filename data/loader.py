@@ -109,3 +109,89 @@ def load_wesad_subject(subject_id, data_path, target_rate):
         print(f"   x {subject_id}: Hata - {e}")
         import traceback; traceback.print_exc()
         return None, None
+
+
+# ======================================================================
+# GERCEK ZAMANLI (native-rate) YOL
+# ======================================================================
+# Yukaridaki load_wesad_subject, TUM sinyali daha replay baslamadan once
+# 64 Hz'e indiriyor. Bu, gercek bir sistemde olmayan bir kolaylik: orada
+# sensor kendi hizinda veri gonderir ve yeniden ornekleme her pencerede,
+# sunucuda, olculmesi gereken bir maliyet olarak yapilir.
+#
+# Asagidaki fonksiyonlar sinyali HAM HIZINDA dondurur; yeniden ornekleme
+# streaming/buffer.py icindeki MultiRateBuffer'a birakilir.
+
+#: (akis adi, orijinal ornekleme hizi Hz, kanal sayisi) -- SIRA KRITIK,
+#: egitimdeki 14 kanal duzeniyle birebir ayni olmak zorunda.
+NATIVE_STREAMS = [
+    ('chest_ACC',  700, 3),
+    ('chest_ECG',  700, 1),
+    ('chest_EMG',  700, 1),
+    ('chest_EDA',  700, 1),
+    ('chest_Temp', 700, 1),
+    ('chest_Resp', 700, 1),
+    ('wrist_ACC',   32, 3),
+    ('wrist_BVP',   64, 1),
+    ('wrist_EDA',    4, 1),
+    ('wrist_TEMP',   4, 1),
+]
+
+LABEL_RATE = 700  # WESAD etiketleri gogus hizinda kayitli
+
+
+def load_wesad_subject_native(subject_id, data_path):
+    """
+    Bir subject'i HAM ornekleme hizlarinda dondurur. Yeniden ornekleme YAPMAZ.
+
+    Returns
+    -------
+    streams : dict[str, np.ndarray]  -- her akis (N_i, C_i) seklinde, kendi hizinda
+    labels  : np.ndarray (N_700,)    -- 700 Hz'deki ham WESAD etiketleri
+    (None, None) : dosya yoksa / hata varsa
+    """
+    subject_path = os.path.join(data_path, subject_id, f"{subject_id}.pkl")
+    if not os.path.exists(subject_path):
+        print(f"   x {subject_id}: Dosya bulunamadi")
+        return None, None
+
+    try:
+        with open(subject_path, 'rb') as f:
+            data = pickle.load(f, encoding='latin1')
+
+        chest = data['signal']['chest']
+        wrist = data['signal']['wrist']
+
+        streams = {
+            'chest_ACC':  np.asarray(chest['ACC'], dtype=np.float64),
+            'chest_ECG':  np.asarray(chest['ECG'], dtype=np.float64).reshape(-1, 1),
+            'chest_EMG':  np.asarray(chest['EMG'], dtype=np.float64).reshape(-1, 1),
+            'chest_EDA':  np.asarray(chest['EDA'], dtype=np.float64).reshape(-1, 1),
+            'chest_Temp': np.asarray(chest['Temp'], dtype=np.float64).reshape(-1, 1),
+            'chest_Resp': np.asarray(chest['Resp'], dtype=np.float64).reshape(-1, 1),
+            'wrist_ACC':  np.asarray(wrist['ACC'], dtype=np.float64),
+            'wrist_BVP':  np.asarray(wrist['BVP'], dtype=np.float64).reshape(-1, 1),
+            'wrist_EDA':  np.asarray(wrist['EDA'], dtype=np.float64).reshape(-1, 1),
+            'wrist_TEMP': np.asarray(wrist['TEMP'], dtype=np.float64).reshape(-1, 1),
+        }
+        labels = data['label'].astype(int)
+        return streams, labels
+
+    except Exception as e:
+        print(f"   x {subject_id}: Hata - {e}")
+        import traceback; traceback.print_exc()
+        return None, None
+
+
+def native_payload_bytes(tick_ms, dtype_bytes=4):
+    """
+    Bir tick'te sensorden gelen ham veri miktari (bayt).
+
+    Adim 3'teki bant genisligi hesabi icin; 64 Hz'e indirilmis veriyle
+    karsilastirinca aradaki fark, yeniden ornekleme nerede yapilirsa
+    agdan ne kadar veri gectigini gosterir.
+    """
+    total = 0
+    for _, rate, ch in NATIVE_STREAMS:
+        total += int(round(rate * tick_ms / 1000.0)) * ch
+    return total * dtype_bytes

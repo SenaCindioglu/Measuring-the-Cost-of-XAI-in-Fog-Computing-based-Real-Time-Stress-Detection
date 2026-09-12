@@ -18,10 +18,11 @@ import time
 import numpy as np
 import torch
 
-from data.loader import load_wesad_subject
+from data.loader import (load_wesad_subject, load_wesad_subject_native,
+                         NATIVE_STREAMS, LABEL_RATE)
 from data.windowing import filter_valid_labels, labels_to_binary
 from data.normalization import apply_normalization, RunningNormalizer
-from streaming.buffer import RollingBuffer
+from streaming.buffer import RollingBuffer, MultiRateBuffer
 
 
 def replay_subject(subject_id, model, mean, std, cfg, profiler,
@@ -130,4 +131,123 @@ def replay_subject(subject_id, model, mean, std, cfg, profiler,
 
     print(f"   OK {subject_id}: {window_count} pencere islendi "
           f"({min(warmup_windows, window_count)} tanesi warm-up olarak haric tutuldu)")
+    return window_count
+
+
+def replay_subject_native(subject_id, model, mean, std, cfg, profiler,
+                          tick_ms=500, warmup_windows=15, realtime=False,
+                          norm_mode='running'):
+    """
+    GERCEKCI yol: sensor kendi ham hizinda veri gonderir, yeniden ornekleme
+    sunucuda, HER PENCEREDE yapilir ve olculur.
+
+    replay_subject'ten farki
+    ------------------------
+    replay_subject, 700 Hz gogus sinyalini daha replay baslamadan once bir
+    kerede 64 Hz'e indiriyor. Bu, gercek bir sistemde bedava olmayan bir isi
+    olcum disinda birakiyor. Burada her akis kendi hizinda birikir ve pencere
+    hazir oldugunda 64 Hz'e indirilir; maliyet 'resampling' asamasinda gorunur.
+
+    Etiketleme farki
+    ----------------
+    Eski yol, gecersiz etiketli ornekleri sinyalden ATIYOR ve kalanlari
+    birlestiriyordu; bu, zamanda atlama demek ve gercek zamanli bir sistemde
+    mumkun degil. Burada zaman kesintisiz akar; pencerenin cogunluk etiketi
+    gecerli degilse o pencere yalnizca RAPORLAMA disinda birakilir.
+    """
+    if norm_mode not in ('fixed', 'running'):
+        raise ValueError(f"Bilinmeyen norm_mode: {norm_mode} ('fixed' veya 'running')")
+
+    print(f"\n>> Replay basliyor [native]: {subject_id} (tick={tick_ms}ms, "
+          f"warmup={warmup_windows} pencere, norm={norm_mode})")
+
+    streams, raw_labels = load_wesad_subject_native(subject_id, cfg.DATA_PATH)
+    if streams is None:
+        print(f"   x {subject_id} yuklenemedi, atlaniyor.")
+        return 0
+
+    buf = MultiRateBuffer(NATIVE_STREAMS, cfg.WINDOW_DURATION,
+                          cfg.HOP_DURATION, cfg.WINDOW_SIZE)
+    runner = RunningNormalizer(cfg.NUM_CHANNELS) if norm_mode == 'running' else None
+
+    tick_s = tick_ms / 1000.0
+    # Her akis icin tick basina kac ornek gonderilecegi ve okuma imleci
+    per_tick = {name: int(round(rate * tick_s)) for name, rate, _ in NATIVE_STREAMS}
+    cursor = {name: 0 for name, _, _ in NATIVE_STREAMS}
+    n_ticks = min(len(streams[name]) // per_tick[name]
+                  for name, _, _ in NATIVE_STREAMS if per_tick[name] > 0)
+
+    window_count = 0
+    skipped = 0
+
+    for _ in range(n_ticks):
+        chunks = {}
+        for name, _, _ in NATIVE_STREAMS:
+            k = per_tick[name]
+            c = cursor[name]
+            chunks[name] = streams[name][c:c + k]
+            cursor[name] = c + k
+
+        ready = buf.push(chunks, tick_s)
+
+        if realtime:
+            time.sleep(tick_s)
+
+        if not ready:
+            continue
+
+        # Pencerenin kapsadigi zaman araligina karsilik gelen 700 Hz etiketleri
+        end_i = int(round(buf.elapsed_s * LABEL_RATE))
+        start_i = int(round((buf.elapsed_s - cfg.WINDOW_DURATION) * LABEL_RATE))
+        span = raw_labels[max(0, start_i):min(end_i, len(raw_labels))]
+        if len(span) == 0:
+            continue
+        majority = int(np.bincount(span.astype(int)).argmax())
+        if majority not in cfg.VALID_LABELS:
+            skipped += 1
+            continue
+        true_label = 1 if majority == 2 else 0
+
+        window_count += 1
+        is_warmup = window_count <= warmup_windows
+
+        with profiler.record_window(is_warmup=is_warmup, subject=subject_id) as rec:
+            with rec.stage('resampling'):
+                # HAM hizdan 64 Hz'e indirgeme -- eski yolda bu is replay'den
+                # once bir kere yapiliyordu, burada her pencerede yapiliyor
+                raw_window = buf.get_window()          # (640, 14)
+
+            if raw_window is None:
+                continue
+
+            with rec.stage('preprocessing'):
+                if runner is not None:
+                    # Yalnizca yeni gelen kismi istatistige kat (cift saymamak icin)
+                    new_part = raw_window if window_count == 1 else raw_window[-cfg.HOP_SIZE:]
+                    runner.update(new_part)
+                    w_mean, w_std = runner.mean, runner.std
+                else:
+                    w_mean, w_std = mean, std
+                norm_window = apply_normalization(raw_window, w_mean, w_std)
+
+            with rec.stage('tensor_prep'):
+                x = norm_window.transpose(1, 0)
+                x_tensor = torch.FloatTensor(x).unsqueeze(0).to(cfg.DEVICE)
+
+            with rec.stage('inference'):
+                with torch.no_grad():
+                    logits = model(x_tensor)
+                    if cfg.DEVICE.type == 'cuda':
+                        torch.cuda.synchronize()
+
+            with rec.stage('postprocessing'):
+                probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+                pred = int(probs.argmax())
+                confidence = float(probs.max())
+
+            rec.set_result(true_label=true_label, pred_label=pred, confidence=confidence)
+
+    print(f"   OK {subject_id}: {window_count} pencere islendi, "
+          f"{skipped} pencere gecersiz etiket nedeniyle atlandi "
+          f"({min(warmup_windows, window_count)} warm-up haric)")
     return window_count

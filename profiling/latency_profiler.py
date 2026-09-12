@@ -243,7 +243,7 @@ class LatencyProfiler:
             return
         print(f"\n[SUMMARY] Latency ozeti ({s['n_windows']} pencere, "
               f"{s['n_warmup_excluded']} warm-up haric tutuldu):")
-        for stage in ['preprocessing', 'tensor_prep', 'inference', 'postprocessing', 'total']:
+        for stage in ['resampling', 'preprocessing', 'tensor_prep', 'inference', 'postprocessing', 'total']:
             if stage in s:
                 st = s[stage]
                 print(f"   {stage:>15}: mean={st['mean_ms']:.3f}ms  "

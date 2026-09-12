@@ -53,3 +53,104 @@ class RollingBuffer:
         if len(self._buffer) < self.window_size:
             return None
         return self._buffer.copy()  # (window_size, num_channels)
+
+
+class MultiRateBuffer:
+    """
+    HAM ornekleme hizlarinda gelen coklu sensor akisini biriktirir ve pencere
+    hazir oldugunda ortak hedef hiza (64 Hz) indirerek tek bir (T, C) dizi uretir.
+
+    RollingBuffer'dan farki: orada veri buffer'a girmeden once zaten 64 Hz'e
+    indirilmis oluyordu, yani yeniden ornekleme maliyeti olcum disinda kaliyordu.
+    Burada her akis kendi hizinda birikir ve indirgeme HER PENCEREDE, olculebilir
+    bir is olarak yapilir. Gercek bir sistemde bu is sunucuda yapilir.
+
+    Kenar etkisi notu: pencere basina yeniden ornekleme, tum sinyali bir kerede
+    indirmekle birebir ayni sonucu vermez (pencere kenarlarinda interpolasyon
+    komsulari farkli). Fark ic bolgede ihmal edilebilir duzeydedir ve zaten
+    gercek zamanli bir sistemin yapabileceginin tam karsiligidir: elinde
+    yalnizca o ana kadar gelmis veri vardir.
+    """
+
+    def __init__(self, streams_spec, window_duration, hop_duration, window_size):
+        """
+        streams_spec : [(ad, orijinal_hiz_Hz, kanal_sayisi), ...] -- kanal sirasi
+                       cikti dizisindeki sirayi belirler
+        window_size  : hedef pencere uzunlugu (orn. 640 = 10s @ 64Hz)
+        """
+        self.spec = list(streams_spec)
+        self.window_duration = float(window_duration)
+        self.hop_duration = float(hop_duration)
+        self.window_size = int(window_size)
+
+        # Her akis icin pencereyi doldurmaya yetecek kadar ornek tutulur
+        self._need = {name: int(round(rate * self.window_duration))
+                      for name, rate, _ in self.spec}
+        self._buf = {name: np.zeros((0, ch), dtype=np.float64)
+                     for name, _, ch in self.spec}
+
+        self.elapsed_s = 0.0
+        self._since_last = 0.0
+        self._first_emitted = False
+
+    def push(self, chunks, tick_s):
+        """
+        chunks : dict[ad] -> (n_i, C_i) o tick'te gelen ham veri
+        tick_s : bu tick'in kac saniyelik veri tasidigi
+
+        Returns: bool -- bu push sonrasi yeni bir pencere hazir mi?
+        """
+        for name, _, _ in self.spec:
+            c = chunks.get(name)
+            if c is None or len(c) == 0:
+                continue
+            b = np.concatenate([self._buf[name], c], axis=0)
+            need = self._need[name]
+            if len(b) > need:
+                b = b[-need:]          # bellek sismesin: sadece bir pencerelik tut
+            self._buf[name] = b
+
+        self.elapsed_s += tick_s
+        self._since_last += tick_s
+
+        if not self._first_emitted:
+            if self.elapsed_s >= self.window_duration and self._full():
+                self._first_emitted = True
+                self._since_last = 0.0
+                return True
+            return False
+
+        if self._since_last >= self.hop_duration:
+            self._since_last = 0.0
+            return True
+        return False
+
+    def _full(self):
+        return all(len(self._buf[n]) >= self._need[n] for n, _, _ in self.spec)
+
+    def get_window(self):
+        """
+        Tum akislari hedef uzunluga indirip (window_size, toplam_kanal) dondurur.
+        Bu cagri YENIDEN ORNEKLEME MALIYETINI icerir -- olcum bunu kapsamali.
+        """
+        if not self._full():
+            return None
+
+        out = []
+        for name, _, _ in self.spec:
+            block = self._buf[name]                 # (n_i, C_i) ham hizda
+            out.append(_resample_block(block, self.window_size))
+        return np.concatenate(out, axis=1)          # (window_size, C_toplam)
+
+
+def _resample_block(block, target_len):
+    """(n, c) bloku dogrusal interpolasyonla (target_len, c) haline getirir."""
+    n, c = block.shape
+    if n == target_len:
+        return block
+    src = np.linspace(0.0, n - 1.0, n)
+    dst = np.linspace(0.0, n - 1.0, target_len)
+    out = np.empty((target_len, c), dtype=np.float64)
+    for i in range(c):
+        out[:, i] = np.interp(dst, src, block[:, i])
+    return out

@@ -31,7 +31,7 @@ import torch
 from config import config
 from models.temporal_cnn import load_checkpoint
 from data.normalization import load_stats, ensure_fixed_stats
-from streaming.replay_simulator import replay_subject
+from streaming.replay_simulator import replay_subject, replay_subject_native
 from profiling.latency_profiler import LatencyProfiler
 
 
@@ -84,6 +84,10 @@ def main():
                         help="Haric tutulacak ilk pencere sayisi")
     parser.add_argument('--realtime', action='store_true',
                         help="Tick'ler arasina gercek time.sleep() ekle (demo amacli)")
+    parser.add_argument('--pipeline', choices=['prepared', 'native'], default=cfg.DEFAULT_PIPELINE,
+                        help="prepared: sinyal replay oncesi 64 Hz'e indirilir (yeniden ornekleme "
+                             "olcum disi) | native: sensor ham hizinda gonderir, indirgeme her "
+                             "pencerede sunucuda yapilir ve OLCULUR")
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS,
                         help="PyTorch CPU is parcacigi sayisi. Kucuk modelde fazla is "
                              "parcacigi senkronizasyon yuzunden YAVASLATIR; varsayilan 1.")
@@ -112,6 +116,9 @@ def main():
         print(f"Offline val  : F1={meta['best_val_f1']:.4f} on {meta.get('val_subjects')}")
     print(f"Subjects     : {args.subject}")
     print(f"Normalizasyon: {args.norm_mode}")
+    print(f"Pipeline     : {args.pipeline}" +
+          ("   (yeniden ornekleme olcume dahil)" if args.pipeline == 'native'
+           else "   (yeniden ornekleme replay oncesi, olcum disi)"))
     print(f"Tick         : {args.tick_ms}ms | Warmup: {args.warmup_windows} pencere | "
           f"Realtime sleep: {args.realtime}")
     print(f"Is parcacigi : {torch.get_num_threads()} (torch) / {torch.get_num_interop_threads()} (interop)")
@@ -129,10 +136,11 @@ def main():
     profiler = LatencyProfiler(device_type=cfg.DEVICE.type)
     profiler.start_sampling()
 
+    replay_fn = replay_subject_native if args.pipeline == 'native' else replay_subject
     for subj in args.subject:
-        replay_subject(subj, model, mean, std, cfg, profiler,
-                       tick_ms=args.tick_ms, warmup_windows=args.warmup_windows,
-                       realtime=args.realtime, norm_mode=args.norm_mode)
+        replay_fn(subj, model, mean, std, cfg, profiler,
+                  tick_ms=args.tick_ms, warmup_windows=args.warmup_windows,
+                  realtime=args.realtime, norm_mode=args.norm_mode)
 
     profiler.stop_sampling()
     profiler.print_summary(exclude_warmup=True)
@@ -145,6 +153,7 @@ def main():
         'checkpoint_meta': meta,
         'subjects': args.subject,
         'norm_mode': args.norm_mode,
+        'pipeline': args.pipeline,
         'tick_ms': args.tick_ms,
         'warmup_windows': args.warmup_windows,
         'device': str(cfg.DEVICE),

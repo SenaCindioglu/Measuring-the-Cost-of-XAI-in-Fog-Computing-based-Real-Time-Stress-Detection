@@ -101,6 +101,14 @@ class Config:
     # uzerinde, donusumlu tekrarlarla ver.
     DEFAULT_THREADS = 1
 
+    # Pipeline yolu:
+    #   'prepared' -> sinyal replay baslamadan once 64 Hz'e indirilir.
+    #                 Yeniden ornekleme maliyeti OLCUM DISINDA kalir.
+    #   'native'   -> sensor ham hizinda gonderir (gogus 700 Hz, bilek 32/64/4 Hz),
+    #                 indirgeme her pencerede sunucuda yapilir ve olculur.
+    # Gercekci olan 'native'; 'prepared' eski sonuclarla karsilastirma icin durur.
+    DEFAULT_PIPELINE = 'native'
+
     # Normalizasyon modu:
     #   'fixed'   -> train subjectlerinden hesaplanmis sabit mean/std (deployment gercegi)
     #   'running' -> o ana kadar gorulen veriden nedensel (causal) mean/std;

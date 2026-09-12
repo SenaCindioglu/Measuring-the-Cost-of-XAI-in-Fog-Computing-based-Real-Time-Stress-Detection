@@ -1,0 +1,144 @@
+{
+  "resampling": {
+    "mean_ms": 1.6992146030490576,
+    "median_ms": 1.5301000094041228,
+    "p95_ms": 2.7187000028789057,
+    "p99_ms": 4.732563986908648,
+    "std_ms": 0.6876372764694701,
+    "min_ms": 0.8151999791152775,
+    "max_ms": 7.242800027597696
+  },
+  "preprocessing": {
+    "mean_ms": 0.28856825289049254,
+    "median_ms": 0.2403000253252685,
+    "p95_ms": 0.4931200179271402,
+    "p99_ms": 2.0605680346488957,
+    "std_ms": 0.273094553031086,
+    "min_ms": 0.11309998808428645,
+    "max_ms": 2.7076000114902854
+  },
+  "tensor_prep": {
+    "mean_ms": 0.17708047539792665,
+    "median_ms": 0.14540000120177865,
+    "p95_ms": 0.2531600068323315,
+    "p99_ms": 1.0029679839499297,
+    "std_ms": 0.23977477873605516,
+    "min_ms": 0.07400003960356116,
+    "max_ms": 3.9637000299990177
+  },
+  "inference": {
+    "mean_ms": 3.2253989828070577,
+    "median_ms": 2.901999978348613,
+    "p95_ms": 4.859079991001637,
+    "p99_ms": 9.030627992469821,
+    "std_ms": 1.3005088304762022,
+    "min_ms": 2.010100055485964,
+    "max_ms": 16.828499967232347
+  },
+  "postprocessing": {
+    "mean_ms": 0.09893429501564044,
+    "median_ms": 0.08710002293810248,
+    "p95_ms": 0.14906002907082447,
+    "p99_ms": 0.41743200737983,
+    "std_ms": 0.08439414268459537,
+    "min_ms": 0.04349998198449612,
+    "max_ms": 1.5967999934218824
+  },
+  "total": {
+    "mean_ms": 5.554357216774893,
+    "median_ms": 5.140100023709238,
+    "p95_ms": 8.450199989601973,
+    "p99_ms": 11.7765759723261,
+    "std_ms": 1.6308302701014465,
+    "min_ms": 3.688800032250583,
+    "max_ms": 19.02349997544661
+  },
+  "jitter": {
+    "mean_abs_delta_ms": 1.2500319733057919,
+    "std_ms": 1.6308302701014465,
+    "p95_abs_delta_ms": 4.688415015698408
+  },
+  "cpu_percent": {
+    "mean": 84.39999999999999,
+    "max": 100.3,
+    "p95": 100.3,
+    "n_samples": 77,
+    "interval_s": 0.1
+  },
+  "rss_mb": {
+    "mean": 465.0590049342105,
+    "max": 536.74609375
+  },
+  "n_windows": 589,
+  "n_warmup_excluded": 15,
+  "classification": {
+    "n_labeled_windows": 589,
+    "accuracy": 0.8573853989813243,
+    "stress_precision": 0.9814814814814815,
+    "stress_recall": 0.3897058823529412,
+    "stress_f1": 0.5578947368421052,
+    "confusion": {
+      "tn": 452,
+      "fp": 1,
+      "fn": 83,
+      "tp": 53
+    },
+    "stress_ratio_true": 0.23089983022071306,
+    "stress_ratio_pred": 0.09168081494057725
+  },
+  "subjects": [
+    "S11"
+  ],
+  "run_config": {
+    "model": "wesad_best_model_f32-128_k9.pt",
+    "architecture": {
+      "num_channels": 14,
+      "filters": [
+        32,
+        128
+      ],
+      "kernel_size": 9,
+      "conv_dropout": 0.2,
+      "fc_dropout": 0.5,
+      "depth": 2,
+      "num_params": 49890
+    },
+    "checkpoint_meta": {
+      "val_subjects": [
+        "S11",
+        "S14"
+      ],
+      "train_subjects": [
+        "S2",
+        "S16",
+        "S7",
+        "S10",
+        "S4",
+        "S3",
+        "S17",
+        "S6",
+        "S9",
+        "S13",
+        "S15",
+        "S5",
+        "S8"
+      ],
+      "best_val_f1": 0.9386203979456768,
+      "num_params": 49890
+    },
+    "subjects": [
+      "S11"
+    ],
+    "norm_mode": "running",
+    "pipeline": "native",
+    "tick_ms": 500,
+    "warmup_windows": 15,
+    "device": "cpu",
+    "torch_threads": 1,
+    "window_size": 640,
+    "hop_size": 320,
+    "window_latency_s": 10.0,
+    "hop_latency_s": 5.0,
+    "seed": 42
+  }
+}

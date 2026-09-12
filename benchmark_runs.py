@@ -44,20 +44,21 @@ import torch
 from config import config
 from models.temporal_cnn import load_checkpoint
 from data.normalization import ensure_fixed_stats
-from streaming.replay_simulator import replay_subject
+from streaming.replay_simulator import replay_subject, replay_subject_native
 from profiling.latency_profiler import LatencyProfiler
 
-STAGES = ['preprocessing', 'tensor_prep', 'inference', 'postprocessing', 'total']
+STAGES = ['resampling', 'preprocessing', 'tensor_prep', 'inference', 'postprocessing', 'total']
 
 
-def one_run(model, mean, std, cfg, subjects, tick_ms, warmup, norm_mode):
+def one_run(model, mean, std, cfg, subjects, tick_ms, warmup, norm_mode, pipeline):
     """Tek bir replay kosusu yapar, ozet istatistikleri dondurur."""
+    fn = replay_subject_native if pipeline == 'native' else replay_subject
     profiler = LatencyProfiler(device_type=cfg.DEVICE.type)
     profiler.start_sampling()
     for subj in subjects:
-        replay_subject(subj, model, mean, std, cfg, profiler,
-                       tick_ms=tick_ms, warmup_windows=warmup,
-                       realtime=False, norm_mode=norm_mode)
+        fn(subj, model, mean, std, cfg, profiler,
+           tick_ms=tick_ms, warmup_windows=warmup,
+           realtime=False, norm_mode=norm_mode)
     profiler.stop_sampling()
     return profiler.summary(exclude_warmup=True)
 
@@ -84,6 +85,9 @@ def main():
     parser.add_argument('--repeat', type=int, default=5, help="Tekrar sayisi (tur)")
     parser.add_argument('--threads', nargs='+', type=int, default=[cfg.DEFAULT_THREADS],
                         help="Karsilastirilacak is parcacigi sayilari; birden fazlaysa donusumlu kosulur")
+    parser.add_argument('--pipeline', nargs='+', choices=['prepared', 'native'],
+                        default=[cfg.DEFAULT_PIPELINE],
+                        help="Karsilastirilacak pipeline yollari; birden fazlaysa donusumlu kosulur")
     parser.add_argument('--norm-mode', choices=['fixed', 'running'], default=cfg.DEFAULT_NORM_MODE)
     parser.add_argument('--tick-ms', type=int, default=cfg.DEFAULT_TICK_MS)
     parser.add_argument('--warmup-windows', type=int, default=cfg.DEFAULT_WARMUP_WINDOWS)
@@ -107,20 +111,21 @@ def main():
     print(f"Subjects   : {args.subject}   Normalizasyon: {args.norm_mode}")
     print(f"Tekrar     : {args.repeat} tur x {len(args.threads)} yapilandirma "
           f"= {args.repeat * len(args.threads)} kosu")
-    print(f"Is parcacigi: {args.threads}" +
-          ("   (donusumlu sirada)" if len(args.threads) > 1 else ""))
+    print(f"Is parcacigi: {args.threads}   Pipeline: {args.pipeline}")
     print("=" * 70)
 
-    # {threads: [summary, ...]}
-    runs = {t: [] for t in args.threads}
+    # Karsilastirilan yapilandirmalar: (pipeline, iplik). Donusumlu kosulur.
+    configs = [(p, t) for p in args.pipeline for t in args.threads]
+    runs = {c: [] for c in configs}
 
     for r in range(args.repeat):
-        for t in args.threads:                      # donusumlu: isinma kaymasi esit dagilir
+        for c in configs:
+            pipe, t = c
             torch.set_num_threads(t)
             s = one_run(model, mean, std, cfg, args.subject,
-                        args.tick_ms, args.warmup_windows, args.norm_mode)
-            runs[t].append(s)
-            print(f"  tur {r+1}/{args.repeat} | {t} iplik -> "
+                        args.tick_ms, args.warmup_windows, args.norm_mode, pipe)
+            runs[c].append(s)
+            print(f"  tur {r+1}/{args.repeat} | {pipe}/{t} iplik -> "
                   f"medyan {s['total']['median_ms']:.3f} ms, "
                   f"p95 {s['total']['p95_ms']:.3f} ms, "
                   f"jitter {s['jitter']['mean_abs_delta_ms']:.3f} ms")
@@ -130,14 +135,18 @@ def main():
         'model': os.path.basename(args.model), 'architecture': arch,
         'subjects': args.subject, 'norm_mode': args.norm_mode,
         'tick_ms': args.tick_ms, 'warmup_windows': args.warmup_windows,
-        'repeat': args.repeat, 'threads': args.threads,
+        'repeat': args.repeat, 'threads': args.threads, 'pipeline': args.pipeline,
         'device': str(cfg.DEVICE), 'window_size': cfg.WINDOW_SIZE, 'hop_size': cfg.HOP_SIZE,
-    }, 'by_threads': {}}
+    }, 'by_config': {}}
 
-    for t in args.threads:
-        ss = runs[t]
-        entry = {'n_runs': len(ss), 'n_windows_per_run': ss[0]['n_windows'], 'stages': {}}
+    for c in configs:
+        pipe, t = c
+        ss = runs[c]
+        entry = {'pipeline': pipe, 'threads': t, 'n_runs': len(ss),
+                 'n_windows_per_run': ss[0]['n_windows'], 'stages': {}}
         for st in STAGES:
+            if st not in ss[0]:
+                continue                       # 'resampling' yalnizca native yolda var
             entry['stages'][st] = {
                 'median_of_run_medians': spread([s[st]['median_ms'] for s in ss]),
                 'median_of_run_p95':     spread([s[st]['p95_ms'] for s in ss]),
@@ -148,39 +157,54 @@ def main():
             entry['cpu_percent'] = spread([s['cpu_percent']['mean'] for s in ss])
         if 'classification' in ss[0]:
             entry['classification'] = ss[0]['classification']   # deterministik, tek kopya yeter
-        report['by_threads'][str(t)] = entry
+        report['by_config'][pipe + '_t' + str(t)] = entry
 
     print("\n" + "=" * 70)
     print(f"SONUC  ({args.repeat} tekrarin medyani +/- tekrarlar arasi yayilim)")
     print("=" * 70)
-    hdr = f"{'iplik':>6}{'p50':>9}{'p95':>9}{'p99':>9}{'jitter':>9}{'CPU%':>8}{'yayilim':>10}"
-    print(hdr)
-    for t in args.threads:
-        e = report['by_threads'][str(t)]
+    print(f"{'yapilandirma':<18}{'p50':>9}{'p95':>9}{'p99':>9}{'jitter':>9}{'CPU%':>8}{'yayilim':>10}")
+    for c in configs:
+        pipe, t = c
+        e = report['by_config'][pipe + '_t' + str(t)]
         p50 = e['stages']['total']['median_of_run_medians']
         p95 = e['stages']['total']['median_of_run_p95']['median']
-        print(f"{t:>6}{p50['median']:>9.3f}{p95:>9.3f}{e['p99']['median']:>9.3f}"
-              f"{e['jitter']['median']:>9.3f}"
+        name = pipe + '/' + str(t) + ' iplik'
+        print(f"{name:<18}{p50['median']:>9.3f}{p95:>9.3f}"
+              f"{e['p99']['median']:>9.3f}{e['jitter']['median']:>9.3f}"
               f"{e.get('cpu_percent', {}).get('median', float('nan')):>8.1f}"
               f"{p50['range_pct']:>9.1f}%")
+
+    print()
+    print("ASAMA DOKUMU (kosu ici medyanlarin medyani, ms)")
+    print(f"{'yapilandirma':<18}" + ''.join(f"{st[:9]:>12}" for st in STAGES))
+    for c in configs:
+        pipe, t = c
+        e = report['by_config'][pipe + '_t' + str(t)]
+        row = ''
+        for st in STAGES:
+            if st in e['stages']:
+                row += f"{e['stages'][st]['median_of_run_medians']['median']:>12.3f}"
+            else:
+                row += f"{'-':>12}"
+        name = pipe + '/' + str(t) + ' iplik'
+        print(f"{name:<18}{row}")
     print("\nSutunlar: p50/p95/p99 kosu ICI dagilimdan (ms), 'yayilim' ise ayni")
     print("yapilandirmanin tekrarlari arasindaki fark. Yayilim buyukse tek kosunun")
     print("sonucu tek basina raporlanamaz.")
 
-    if len(args.threads) > 1:
-        meds = {t: report['by_threads'][str(t)]['stages']['total']['median_of_run_medians']
-                for t in args.threads}
-        best = min(meds, key=lambda t: meds[t]['median'])
-        worst_spread = max(meds[t]['range_pct'] for t in args.threads)
-        gap = (max(meds[t]['median'] for t in args.threads) -
-               min(meds[t]['median'] for t in args.threads))
+    if len(configs) > 1:
+        meds = {c: report['by_config'][c[0] + '_t' + str(c[1])]['stages']['total']['median_of_run_medians']
+                for c in configs}
+        best = min(meds, key=lambda c: meds[c]['median'])
+        worst_spread = max(meds[c]['range_pct'] for c in configs)
+        gap = (max(meds[c]['median'] for c in configs) -
+               min(meds[c]['median'] for c in configs))
         rel_gap = gap / meds[best]['median'] * 100
-        print(f"\nEn dusuk medyan: {best} iplik ({meds[best]['median']:.3f} ms)")
+        print(f"\nEn dusuk medyan: {best[0]}/{best[1]} iplik ({meds[best]['median']:.3f} ms)")
         print(f"Yapilandirmalar arasi fark: %{rel_gap:.1f} | "
               f"tekrarlar arasi en buyuk yayilim: %{worst_spread:.1f}")
         if rel_gap < worst_spread:
-            print(">> Fark, olcum gurultusunun altinda. Is parcacigi sayisinin bu "
-                  "is yukunde belirleyici olmadigi sonucuna varilir.")
+            print(">> Fark, olcum gurultusunun altinda; yapilandirmalar ayirt edilemiyor.")
 
     path = os.path.join(cfg.RESULTS_DIR, f'benchmark_{args.tag}.json')
     with open(path, 'w') as f:
