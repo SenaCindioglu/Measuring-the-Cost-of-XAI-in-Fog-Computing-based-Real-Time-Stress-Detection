@@ -247,3 +247,113 @@ geçersiz olan pencereler yalnızca raporlama dışında bırakılır.
 indirilmiş halde 1 792 bayt. Yani indirgemeyi sunucuda yapmak ağdan 6.4 kat
 fazla veri geçirmek demektir. Bu, Aşama 3'teki edge/fog yerleşim kararının
 sayısal dayanağıdır.
+
+## İstemci–sunucu ayrımı (Aşama 3)
+
+Önceki aşamalara kadar istemci ve sunucu aynı süreçte çalışıyordu. Bu, ağ
+kaynaklı metriklerin tanım gereği sıfır olması demekti. `serving/` paketi ikisini
+gerçek bir TCP bağlantısıyla ayırır.
+
+```
+serving/protocol.py   tel formatı, çerçeveleme, saat senkronizasyonu
+serving/server.py     açık istek kuyruğu + tek worker, model burada çalışır
+serving/client.py     sensör istemcisi, ham hızda gönderir, zaman damgalarını kaydeder
+run_fog_experiment.py sunucuyu başlatır, N istemciyi koşturur, raporu toplar
+```
+
+Tek komutla uçtan uca deney:
+
+```bash
+python run_fog_experiment.py --subject S11 --realtime --tag realtime_1user
+python run_fog_experiment.py --subject S11 S14 --clients 4 --realtime --tag load_4
+```
+
+Uzaktaki bir sunucuya bağlanmak için `--server-host 192.168.1.42` yeterli;
+o zaman sunucu yerelde başlatılmaz.
+
+### Ölçülen yedi metrik
+
+| Metrik | Tanım | Hangi saatler |
+|---|---|---|
+| latency | paketin istemciden sunucuya ulaşması | iki saat, fark düzeltmesi gerekir |
+| queuing delay | worker meşgulken kuyrukta bekleme | sunucu saati |
+| execution time | pipeline'ın çalışma süresi | sunucu saati |
+| response time | istemcinin gördüğü toplam süre | istemci saati |
+| jitter | response time'ın ardışık değişimi | istemci saati |
+| bandwidth | gönderilen + alınan bayt / süre | — |
+| resource usage | CPU ve bellek | sunucu tarafı |
+
+### İki tasarım kararı ve nedenleri
+
+**Saat katmanı `perf_counter_ns`, `time_ns` değil.** İlk sürüm `time.time_ns()`
+kullanıyordu. Windows'ta çözünürlüğü ölçüldü ve 15.6 ms çıktı
+(`GetSystemTimeAsFileTime`). Loopback gecikmesi 0.1 ms mertebesinde olduğu için
+latency medyanı tam sıfır okuyordu, yani metrik tamamen anlamsızdı.
+`perf_counter` 100 ns çözünürlük verir ama referans noktası sürece özeldir;
+bu yüzden bağlantı başında NTP mantığıyla saat farkı ölçülür (PING/PONG, en
+düşük gidiş-dönüş süresine sahip tur seçilir). Aynı makinede ölçülen fark
+0.001 ms, belirsizlik ±0.13 ms. Bu düzeltme uzak makine durumunu da çözer.
+
+**Sunucuda açık istek kuyruğu var.** İlk sürümde paket okunur okunmaz aynı
+yerde işleniyordu; `t_start` ile `t_recv` bitişik olduğu için queuing delay her
+zaman sıfıra yakın okuyordu ve bekleme süresi latency'nin içinde gizleniyordu.
+Şimdi okuyucu görevi paketi alıp varış zamanını damgalar ve ortak kuyruğa
+koyar, tek worker kuyruğu sırayla boşaltır. İki istemciyle p99 kuyruk gecikmesi
+0.37 ms'den 5.50 ms'ye çıktı, yani metrik artık gerçekten bekleme ölçüyor.
+
+### Sonuçlar
+
+Gerçek sensör hızında, tek istemci, S11'in ilk 10 dakikası, loopback:
+
+| Metrik | ortalama | medyan | p95 | p99 |
+|---|---|---|---|---|
+| latency | 0.909 ms | 0.809 ms | 1.466 ms | 2.707 ms |
+| queuing delay | 0.062 ms | 0.045 ms | 0.085 ms | 0.622 ms |
+| execution time | 8.273 ms | 7.179 ms | 10.524 ms | 11.268 ms |
+| response time | 9.884 ms | 8.821 ms | 12.698 ms | 13.927 ms |
+
+Jitter 3.529 ms. Bant genişliği 184.8 kbps gönderilen, 2.3 kbps alınan,
+toplam 187.2 kbps.
+
+Sunucu içi aşama dökümü (ortalama): resampling 2.211, preprocessing 0.449,
+tensor_prep 0.324, inference 4.648, postprocessing 0.135 ms.
+
+**Doğrulama.** Tek süreçli `--pipeline native` yolu ile istemci–sunucu yolu
+aynı veride birebir aynı sınıflandırma sonucunu veriyor: doğruluk 0.8222,
+stres F1 0.6944, karışıklık matrisi TN=743 FP=184 FN=29 TP=242. Bu, ağ
+katmanının hesabı bozmadığının kanıtı.
+
+### Bir hata daha yakalandı
+
+Tek süreçli native yolda, çoğunluk etiketi geçersiz olan pencereler tamamen
+atlanıyordu. Bu, normalizasyon istatistiğinin o pencerelerde hiç güncellenmemesi
+demekti. Gerçek bir sunucu etiketi görmez, dolayısıyla böyle bir atlama yapamaz.
+Düzeltildikten sonra doğruluk 0.7674'ten 0.8222'ye çıktı ve iki yol birbirine
+eşitlendi. Geçersiz etiketli pencereler artık baştan sona işlenir, yalnızca
+sınıflandırma raporundan çıkarılır.
+
+### Makaleyle karşılaştırma
+
+Erzurumluoğlu ve ark., ICACT 2025, DREAMER veri setiyle fog mimarisinde duygu
+tanıma. Worker düğümü Raspberry Pi 4, istemci Wi-Fi üzerinden bağlı.
+
+| Metrik | Makale (worker) | Bu çalışma (loopback) |
+|---|---|---|
+| latency | 4.7 ms | 0.81 ms |
+| queuing delay | < 1 ms | 0.045 ms |
+| execution time | 34.7 ms | 7.18 ms |
+| response time | 43.3 ms | 8.82 ms |
+| jitter | 17.4 ms | 3.53 ms |
+| bandwidth | 374 kbps | 187 kbps |
+
+**Bu tablo dikkatli okunmalı.** Ağ metrikleri karşılaştırılabilir değil: onların
+ölçümü Wi-Fi üzerinden ayrı bir cihaza, bizimki aynı makinede loopback üzerinden.
+Execution time farkı da donanım farkını içeriyor, Raspberry Pi ile masaüstü
+işlemcisi kıyaslanıyor. Anlamlı olan tek karşılaştırma **bant genişliği**:
+onlar 3 saniyelik pencereden 24 öznitelik çıkarıp gönderiyor, biz 10 saniyelik
+pencerenin ham sinyalini gönderiyoruz, buna rağmen yarısı kadar veri geçiyor.
+
+Asıl fark mimari: onların sisteminde öznitelik çıkarımı hesaplamanın çoğunu
+oluşturuyor, bizde ham sinyal doğrudan modele giriyor ve hesap çok daha ucuz.
+Buna karşılık bizim uçtan uca gecikmemizi hesap değil pencere uzunluğu
+belirliyor: 10 saniyelik pencere, 8.8 ms yanıt süresinin bin katından fazla.

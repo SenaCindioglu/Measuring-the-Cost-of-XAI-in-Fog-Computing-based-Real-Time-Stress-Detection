@@ -152,8 +152,14 @@ def replay_subject_native(subject_id, model, mean, std, cfg, profiler,
     ----------------
     Eski yol, gecersiz etiketli ornekleri sinyalden ATIYOR ve kalanlari
     birlestiriyordu; bu, zamanda atlama demek ve gercek zamanli bir sistemde
-    mumkun degil. Burada zaman kesintisiz akar; pencerenin cogunluk etiketi
-    gecerli degilse o pencere yalnizca RAPORLAMA disinda birakilir.
+    mumkun degil. Burada zaman kesintisiz akar.
+
+    ONEMLI: gecersiz etiketli pencere de BASTAN SONA islenir (yeniden
+    ornekleme, normalizasyon istatistigi guncellemesi, cikarim dahil) ve
+    yalnizca siniflandirma raporundan cikarilir (true_label = -1). Gercek
+    bir sunucu etiketi hic gormez, dolayisiyla "bu pencereyi atlayayim"
+    diyemez. Onceki surum bu pencerelerde normalizasyon istatistigini
+    guncellemiyordu; bu, sunucu yoluna gore daha dusuk dogruluk veriyordu.
     """
     if norm_mode not in ('fixed', 'running'):
         raise ValueError(f"Bilinmeyen norm_mode: {norm_mode} ('fixed' veya 'running')")
@@ -196,17 +202,20 @@ def replay_subject_native(subject_id, model, mean, std, cfg, profiler,
         if not ready:
             continue
 
-        # Pencerenin kapsadigi zaman araligina karsilik gelen 700 Hz etiketleri
+        # Pencerenin kapsadigi zaman araligina karsilik gelen 700 Hz etiketleri.
+        # Gecersizse pencere yine islenir, sadece true_label = -1 olur ve
+        # profiler onu siniflandirma ozetine katmaz.
         end_i = int(round(buf.elapsed_s * LABEL_RATE))
         start_i = int(round((buf.elapsed_s - cfg.WINDOW_DURATION) * LABEL_RATE))
         span = raw_labels[max(0, start_i):min(end_i, len(raw_labels))]
         if len(span) == 0:
             continue
         majority = int(np.bincount(span.astype(int)).argmax())
-        if majority not in cfg.VALID_LABELS:
+        if majority in cfg.VALID_LABELS:
+            true_label = 1 if majority == 2 else 0
+        else:
+            true_label = -1
             skipped += 1
-            continue
-        true_label = 1 if majority == 2 else 0
 
         window_count += 1
         is_warmup = window_count <= warmup_windows
@@ -247,7 +256,7 @@ def replay_subject_native(subject_id, model, mean, std, cfg, profiler,
 
             rec.set_result(true_label=true_label, pred_label=pred, confidence=confidence)
 
-    print(f"   OK {subject_id}: {window_count} pencere islendi, "
-          f"{skipped} pencere gecersiz etiket nedeniyle atlandi "
-          f"({min(warmup_windows, window_count)} warm-up haric)")
+    print(f"   OK {subject_id}: {window_count} pencere islendi "
+          f"({skipped} tanesi gecersiz etiketli, islendi ama raporlanmadi; "
+          f"{min(warmup_windows, window_count)} warm-up haric)")
     return window_count
