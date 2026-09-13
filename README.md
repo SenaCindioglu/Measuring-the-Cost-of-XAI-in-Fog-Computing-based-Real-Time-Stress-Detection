@@ -405,3 +405,79 @@ deney gerçek ağ gecikmesini, jitter'ı ve bant genişliğini verir. Ama bu bir
 kaynak kısıtı yoktur. Raporda bu ayrım açıkça belirtilmelidir. Kaynak kısıtını
 donanımsız taklit etmek gerekirse sunucu Docker altında `--cpus=1 --memory=1g`
 ile çalıştırılabilir; bu da taklit olduğu belirtilerek raporlanır.
+
+## STM32 üzerinde çalışır mı? (analiz)
+
+`tools/mcu_feasibility.py` modelin bir mikrodenetleyicide çalışıp
+çalışmayacağını donanım olmadan hesaplar: katman katman parametre, aktivasyon
+belleği, tepe RAM ihtiyacı ve çarpma-toplama sayısı.
+
+```bash
+python -m tools.mcu_feasibility
+python -m tools.mcu_feasibility --window 320   # 5 saniyelik pencere
+```
+
+### Mimarideki yeri
+
+STM32 bir **mikrodenetleyicidir**, işletim sistemi çalıştırmaz. Fog
+taksonomisinde Raspberry Pi'nin yerini alamaz, çünkü farklı bir katmanda durur:
+
+```
+sensör / uç düğüm   ->  STM32 sınıfı MCU (giyilebilir cihazın içi)
+edge                ->  telefon, gateway
+fog                 ->  Raspberry Pi, küçük sunucu
+cloud               ->  veri merkezi
+```
+
+Ama STM32 daha ilginç bir şeyin yerini alabilir: **ağın tamamının**. Çıkarım
+giyilebilir cihazın içinde yapılırsa fog ile edge arasında seçim yapma sorunu
+ortadan kalkar. Gecikme, mahremiyet ve bant genişliği açısından üçünü de yener.
+
+### Ölçülen gereksinimler (10 s pencere, depth2 / [32,128] / k9)
+
+| | Ağırlık (Flash) | Tepe RAM | Giriş tamponu |
+|---|---|---|---|
+| float32 | 194.9 KB | 320.0 KB | 35.0 KB |
+| float16 | 97.4 KB | 160.0 KB | 17.5 KB |
+| int8 | 48.7 KB | 80.0 KB | 8.8 KB |
+
+Tepe aktivasyon `bn2` katmanında, 81 920 eleman. İkinci evrişim bloğu
+128 kanal × 320 uzunluk ürettiği için darboğaz orada.
+
+| STM32 ailesi | RAM | Flash | float32 | int8 |
+|---|---|---|---|---|
+| F103 (M3) | 20 KB | 128 KB | sığmaz | sığmaz |
+| F407 (M4) | 192 KB | 1 MB | sığmaz | **sığar** |
+| F746 (M7) | 320 KB | 1 MB | sığmaz | **sığar** |
+| H743 (M7) | 1 MB | 2 MB | **sığar** | **sığar** |
+| U575 (M33) | 786 KB | 2 MB | **sığar** | **sığar** |
+
+### Hız sorun değil, bellek sorun
+
+Pencere başına 14.50 milyon çarpma-toplama gerekiyor. Bütçe ise 5 000 ms,
+yani hop süresi.
+
+| Donanım | tahmini süre | bütçe kullanımı |
+|---|---|---|
+| Cortex-M4 @168 MHz, float32 | 287.7 ms | %5.8 |
+| Cortex-M7 @480 MHz, float32 | 37.8 ms | %0.8 |
+| Cortex-M7 @480 MHz, int8 | 12.1 ms | %0.2 |
+
+En yavaş senaryo bile bütçenin yirmide birini kullanıyor. MCU'da darboğaz
+kesinlikle bellek.
+
+### Gerçekten yapmak için gereken iş
+
+Bu analiz kağıt üstünde. Cihaza indirmek için:
+
+1. Modeli ONNX'e aktar, STM32Cube.AI (X-CUBE-AI) ile C koduna çevir. Alternatif:
+   TensorFlow Lite Micro veya elle CMSIS-NN.
+2. int8 nicemleme yap (F407/F746 için zorunlu). Doğruluk kaybı ölçülmeli.
+3. Ön işlemeyi porta et: 700 Hz'den 64 Hz'e indirgeme ve nedensel z-score.
+   İkisi de basit, taşınabilir kod.
+4. Ölçümü cihaz üstünde yap: DWT çevrim sayacı ile süre, UART ile rapor.
+5. Veriyi cihaza besle: SD karttan replay ya da PC'den UART üzerinden akış.
+
+Bu, birkaç günlük değil birkaç haftalık bir iş ve donanım gerektirir. Tez
+kapsamında **fizibilite bölümü** olarak yukarıdaki sayılarla raporlanması,
+tam port yapmaktan çok daha iyi bir maliyet-fayda dengesi sunar.
