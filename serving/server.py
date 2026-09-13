@@ -30,6 +30,7 @@ import argparse
 import asyncio
 import json
 import os
+import platform
 import time
 
 import numpy as np
@@ -40,7 +41,85 @@ from data.loader import NATIVE_STREAMS, LABEL_RATE
 from data.normalization import ensure_fixed_stats, apply_normalization, RunningNormalizer
 from models.temporal_cnn import load_checkpoint
 from streaming.buffer import MultiRateBuffer
+from profiling.latency_profiler import _ResourceSampler
 from serving import protocol as P
+
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
+
+
+def hardware_info():
+    """Sunucunun uzerinde kostugu donanimi tanimlar.
+
+    Raspberry Pi'de platform.processor() bos doner; model adi
+    /proc/device-tree/model ya da /proc/cpuinfo'dan okunur.
+    """
+    info = {
+        'platform': platform.platform(),
+        'machine': platform.machine(),
+        'processor': platform.processor() or None,
+        'python': platform.python_version(),
+        'torch': torch.__version__,
+        'cpu_count': os.cpu_count(),
+        'torch_threads': torch.get_num_threads(),
+    }
+    for path, key in [('/proc/device-tree/model', 'device_model')]:
+        try:
+            with open(path) as f:
+                info[key] = f.read().strip('\x00').strip()
+        except Exception:
+            pass
+    if not info.get('processor'):
+        try:
+            with open('/proc/cpuinfo') as f:
+                for line in f:
+                    if line.lower().startswith('model name'):
+                        info['processor'] = line.split(':', 1)[1].strip()
+                        break
+        except Exception:
+            pass
+    if _HAS_PSUTIL:
+        try:
+            info['total_ram_mb'] = round(psutil.virtual_memory().total / (1024 ** 2), 1)
+            freq = psutil.cpu_freq()
+            if freq:
+                info['cpu_mhz_max'] = freq.max or None
+        except Exception:
+            pass
+    return info
+
+
+def resource_summary(sampler):
+    """Ornekleyiciden CPU ve bellek ozeti.
+
+    process_cpu_percent cok cekirdekli makinede 100'u asabilir (her cekirdek
+    %100 sayilir); system_cpu_percent tum makinenin yuzdesidir. Makaledeki
+    rakamlarla karsilastirirken hangisinin kastedildigine dikkat edilmeli.
+    """
+    import numpy as _np
+    out = {}
+    if sampler and sampler.cpu:
+        c = _np.array(sampler.cpu)
+        out['process_cpu_percent'] = {'mean': float(c.mean()), 'max': float(c.max()),
+                                      'p95': float(_np.percentile(c, 95)),
+                                      'n_samples': int(len(c))}
+    if sampler and sampler.rss:
+        r = _np.array(sampler.rss)
+        out['process_rss_mb'] = {'mean': float(r.mean()), 'max': float(r.max())}
+    if _HAS_PSUTIL:
+        try:
+            vm = psutil.virtual_memory()
+            out['system_cpu_percent'] = psutil.cpu_percent(interval=None)
+            out['system_memory_percent'] = vm.percent
+            if sampler and sampler.rss:
+                out['process_memory_percent'] = round(
+                    max(sampler.rss) / (vm.total / (1024 ** 2)) * 100, 2)
+        except Exception:
+            pass
+    return out
 
 
 class ClientSession:
@@ -142,6 +221,7 @@ async def handle_client(reader, writer, state):
     hello = json.loads(body[1:].decode('utf-8'))
     sess = ClientSession(cfg, hello, state['mean'], state['std'], writer=writer)
     state['sessions'] += 1
+    state['sessions_peak'] = max(state.get('sessions_peak', 0), state['sessions'])
     print(f"[+] istemci baglandi: {sess.client_id} (subject={sess.subject}, "
           f"tick={sess.tick_ms}ms, norm={sess.norm_mode}) {peer}")
 
@@ -154,6 +234,16 @@ async def handle_client(reader, writer, state):
             mtype = P.msg_type(body)
 
             if mtype == P.TYPE_BYE:
+                # Kapanmadan once kendi kaynak kullanimimizi gonder
+                try:
+                    writer.write(P.pack_stats({
+                        'hardware': state['hardware'],
+                        'resources': resource_summary(state.get('sampler')),
+                        'sessions_peak': state.get('sessions_peak', 1),
+                    }))
+                    await writer.drain()
+                except Exception:
+                    pass
                 break
             if mtype == P.TYPE_PING:
                 # Saat olcumu kuyruga GIRMEZ: amaci saf gidis-donus suresini
@@ -198,9 +288,15 @@ async def main_async(args):
         cache = os.path.join(cfg.CHECKPOINT_DIR, f'norm_stats_{tag}.npz')
         mean, std = ensure_fixed_stats(cache, meta.get('train_subjects') or cfg.TRAIN_SUBJECTS, cfg)
 
+    hw = hardware_info()
+    sampler = None
+    if _HAS_PSUTIL:
+        sampler = _ResourceSampler(psutil.Process(os.getpid()), 0.25)
+        sampler.start()
+
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
-             'sessions': 0, 'log_every': args.log_every,
-             'queue': asyncio.Queue()}
+             'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
+             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler}
 
     asyncio.create_task(worker(state))
 
@@ -213,7 +309,10 @@ async def main_async(args):
     print(f"Adres        : {args.host}:{args.port}")
     print(f"Model        : {os.path.basename(args.model)} "
           f"(depth={arch['depth']}, {arch['num_params']:,} parametre)")
-    print(f"Is parcacigi : {torch.get_num_threads()}")
+    print(f"Is parcacigi : {torch.get_num_threads()} / {hw.get('cpu_count')} cekirdek")
+    print(f"Donanim      : {hw.get('device_model') or hw.get('processor') or hw['machine']}")
+    if hw.get('total_ram_mb'):
+        print(f"Bellek       : {hw['total_ram_mb']:.0f} MB")
     print(f"Pencere/hop  : {cfg.WINDOW_SIZE} / {cfg.HOP_SIZE} ornek @ {cfg.TARGET_RATE} Hz")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
     print("=" * 66)

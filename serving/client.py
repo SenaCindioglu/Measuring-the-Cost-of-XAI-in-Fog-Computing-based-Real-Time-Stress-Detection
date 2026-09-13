@@ -116,6 +116,16 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
 
     writer.write(P.pack_bye())
     await writer.drain()
+
+    # Sunucu kapanmadan once kendi donanim ve kaynak ozetini gonderir
+    server_stats = None
+    try:
+        body = await asyncio.wait_for(P.read_frame(reader), timeout=5.0)
+        if body is not None and P.msg_type(body) == P.TYPE_STATS:
+            server_stats = P.unpack_stats(body)
+    except Exception:
+        pass
+
     writer.close()
     try:
         await writer.wait_closed()
@@ -125,10 +135,11 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     wall_s = time.perf_counter() - t_wall0
     clock = {'offset_ns': int(clock_offset), 'rtt_ns': int(clock_rtt),
              'uncertainty_ms': clock_rtt / 2 / 1e6}
-    return records, bytes_sent, bytes_recv, wall_s, clock
+    return records, bytes_sent, bytes_recv, wall_s, clock, server_stats
 
 
-def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg, clock=None):
+def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
+              clock=None, server_stats=None):
     """Makaledeki metrik tanimlariyla ozet uretir."""
     preds = [r for r in records if r['predicted']]
     live = preds[warmup_windows:]                     # isinma pencereleri disarida
@@ -147,6 +158,7 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg, cloc
 
     out = {
         'clock_sync': clock,
+        'server': server_stats,
         'n_packets': len(records),
         'n_predictions': len(preds),
         'n_measured': len(live),
@@ -212,6 +224,23 @@ def print_summary(s, title=""):
         for st, v in s['server_stages'].items():
             print(f"   {st:>14} {v['mean_ms']:>9.3f} {v['median_ms']:>9.3f} "
                   f"{v['p95_ms']:>9.3f} {v['p99_ms']:>9.3f}")
+    srv = s.get('server')
+    if srv:
+        hw = srv.get('hardware', {})
+        rs = srv.get('resources', {})
+        name = hw.get('device_model') or hw.get('processor') or hw.get('machine', '?')
+        print(f"   sunucu        : {name} | {hw.get('cpu_count')} cekirdek, "
+              f"{hw.get('torch_threads')} iplik")
+        if rs.get('process_cpu_percent'):
+            c = rs['process_cpu_percent']
+            print(f"   sunucu CPU    : ort %{c['mean']:.1f}  tepe %{c['max']:.1f} "
+                  f"(surec; {hw.get('cpu_count')} cekirdekte tavan "
+                  f"%{100 * (hw.get('cpu_count') or 1)})")
+        if rs.get('process_rss_mb'):
+            r = rs['process_rss_mb']
+            extra = (f", makinenin %{rs['process_memory_percent']:.1f}'i"
+                     if rs.get('process_memory_percent') else "")
+            print(f"   sunucu bellek : ort {r['mean']:.0f} MB  tepe {r['max']:.0f} MB{extra}")
     if s.get('clock_sync'):
         c = s['clock_sync']
         print(f"   saat farki    : {c['offset_ns'] / 1e6:.3f} ms "
@@ -246,10 +275,10 @@ def main():
         raise SystemExit(f"{args.subject} yuklenemedi")
 
     client_id = f"{args.subject}-{uuid.uuid4().hex[:6]}"
-    records, bs, br, wall, clock = asyncio.run(
+    records, bs, br, wall, clock, srv = asyncio.run(
         run_client(args, cfg, streams, raw_labels, client_id))
 
-    s = summarize(records, bs, br, wall, args.warmup_windows, cfg, clock)
+    s = summarize(records, bs, br, wall, args.warmup_windows, cfg, clock, srv)
     s['config'] = {'subject': args.subject, 'tick_ms': args.tick_ms,
                    'norm_mode': args.norm_mode, 'realtime': args.realtime,
                    'host': args.host, 'port': args.port, 'client_id': client_id}

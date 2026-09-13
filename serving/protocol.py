@@ -59,6 +59,7 @@ TYPE_REPLY = 3
 TYPE_BYE = 4
 TYPE_PING = 5
 TYPE_PONG = 6
+TYPE_STATS = 7
 
 PING = struct.Struct('<Q')      # t1 (istemci saati)
 PONG = struct.Struct('<QQ')     # t1 yankisi + t2 (sunucu saati)
@@ -109,6 +110,20 @@ def pack_hello(cfg_dict) -> bytes:
 
 def pack_bye() -> bytes:
     return frame(bytes([TYPE_BYE]))
+
+
+def pack_stats(stats_dict) -> bytes:
+    """Sunucu, baglanti kapanirken kendi donanim ve kaynak ozetini gonderir.
+
+    Kaynak kullanimi sunucu tarafinda olculmek zorunda: istemci karsi
+    makinenin CPU'sunu goremez. Makaledeki 'resource usage' metriginin
+    karsiligi budur.
+    """
+    return frame(bytes([TYPE_STATS]) + json.dumps(stats_dict).encode('utf-8'))
+
+
+def unpack_stats(body):
+    return json.loads(body[1:].decode('utf-8'))
 
 
 # ----------------------------------------------------------------------

@@ -99,6 +99,7 @@ def aggregate(summaries):
     br = sum(s['bandwidth']['bytes_recv'] for s in summaries)
     w = agg['wall_seconds'] or 1.0
     agg['clock_sync'] = summaries[0].get('clock_sync')
+    agg['server'] = next((s['server'] for s in summaries if s.get('server')), None)
     agg['bandwidth'] = {'bytes_sent': bs, 'bytes_recv': br,
                         'kbps_sent': bs * 8 / 1000.0 / w,
                         'kbps_recv': br * 8 / 1000.0 / w,
@@ -201,8 +202,8 @@ def main():
         wall = time.perf_counter() - t0
 
         summaries = []
-        for (records, bs, br, w, clock), subj in zip(results, subjects):
-            s = summarize(records, bs, br, w, args.warmup_windows, cfg, clock)
+        for (records, bs, br, w, clock, srv), subj in zip(results, subjects):
+            s = summarize(records, bs, br, w, args.warmup_windows, cfg, clock, srv)
             s['subject'] = subj
             summaries.append(s)
 

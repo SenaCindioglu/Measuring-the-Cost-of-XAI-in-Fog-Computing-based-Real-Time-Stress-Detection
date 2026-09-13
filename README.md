@@ -481,3 +481,100 @@ Bu analiz kağıt üstünde. Cihaza indirmek için:
 Bu, birkaç günlük değil birkaç haftalık bir iş ve donanım gerektirir. Tez
 kapsamında **fizibilite bölümü** olarak yukarıdaki sayılarla raporlanması,
 tam port yapmaktan çok daha iyi bir maliyet-fayda dengesi sunar.
+
+## Raspberry Pi kurulumu (fog düğümü)
+
+Sunucu Pi'de, istemci veri setinin olduğu makinede çalışır. **Pi'ye WESAD
+verisi kopyalamaya gerek yok**, sadece depo ve PyTorch yeterli.
+
+### 1. İşletim sistemi
+
+**64-bit şart.** PyTorch'un 32-bit ARM için hazır paketi yok. Raspberry Pi
+Imager'da "Raspberry Pi OS (64-bit)" seç. Kontrol:
+
+```bash
+uname -m        # aarch64 yazmalı, armv7l değil
+```
+
+Pi 4 veya Pi 5 önerilir, en az 2 GB bellek. PyTorch içe aktarıldığında tek
+başına yaklaşık 200 MB tutuyor.
+
+### 2. Kurulum
+
+```bash
+sudo apt update && sudo apt install -y git python3-venv
+git clone https://github.com/SenaCindioglu/files.git
+cd files
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+PyTorch indirmesi büyük, bağlantıya göre birkaç dakika sürebilir.
+
+### 3. Sunucuyu başlat
+
+```bash
+python -m serving.server --host 0.0.0.0 --port 9099
+```
+
+`--host 0.0.0.0` şart. Açılışta kendi donanımını yazar; `Raspberry Pi 4
+Model B` gibi bir satır görmelisin. Pi'nin adresi:
+
+```bash
+hostname -I
+```
+
+### 4. İstemciyi çalıştır (kendi makinende)
+
+```bash
+python run_fog_experiment.py --server-host 192.168.1.42 --subject S11 --realtime --tag pi_1user
+```
+
+### Pi'ye özgü üç nokta
+
+**İş parçacığı sayısını Pi üzerinde yeniden ölç.** Varsayılan 1, ama bu değer
+20 çekirdekli bir x86'da ölçüldü. Pi 4'te dört Cortex-A72 çekirdek var ve
+sonuç farklı çıkabilir. Sunucuyu sırayla `--threads 1`, `--threads 2`,
+`--threads 4` ile çalıştırıp karşılaştır.
+
+**Ethernet kullan.** Wi-Fi'da tek yönlü gecikmenin hata payı ölçülen değerle
+aynı mertebeye çıkıyor (yukarıdaki belirsizlik tablosuna bak). Kablo takmak
+ölçüm kalitesini birkaç kat artırır.
+
+**Isınmayı kontrol et.** Pi 4 soğutucusuz çalışırken sıcaklık nedeniyle hız
+düşürür ve bu gecikme ölçümünü bozar. Deney sırasında izle:
+
+```bash
+watch -n 2 vcgencmd measure_temp
+```
+
+`throttled=0x0` dışında bir değer görürsen soğutucu ekle ve ölçümü tekrarla.
+
+### Ne ölçülmüş olur
+
+Sunucu, bağlantı kapanırken kendi donanımını ve kaynak kullanımını istemciye
+gönderir. Böylece makaledeki yedi metriğin hepsi elde edilir:
+
+| Metrik | Nereden gelir |
+|---|---|
+| latency | istemci, saat farkı düzeltmeli |
+| queuing delay | sunucu saati |
+| execution time | sunucu saati |
+| response time | istemci saati |
+| jitter | istemci saati |
+| bandwidth | istemci bayt sayacı |
+| resource usage | **sunucu tarafı**, CPU % ve bellek MB |
+
+### Karşılaştırma planı
+
+Aynı deneyi üç yerleşimde koşup yan yana koy:
+
+| Yerleşim | Sunucu nerede | Komut |
+|---|---|---|
+| edge | istemcinin kendi makinesi | `--subject S11 --realtime` |
+| fog | Raspberry Pi, aynı ağ | `--server-host <pi-ip> --subject S11 --realtime` |
+| cloud | uzak VPS | `--server-host <vps-ip> --subject S11 --realtime` |
+
+Makalenin de yaptığı karşılaştırma bu. Bulut ayağı için küçük bir VPS aylık
+birkaç dolar; bütçe yoksa o satır atlanıp edge ile fog karşılaştırılabilir,
+eksik olduğu raporda belirtilir.
