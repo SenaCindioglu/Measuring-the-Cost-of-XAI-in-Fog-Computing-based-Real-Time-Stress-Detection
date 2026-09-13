@@ -357,3 +357,51 @@ Asıl fark mimari: onların sisteminde öznitelik çıkarımı hesaplamanın ço
 oluşturuyor, bizde ham sinyal doğrudan modele giriyor ve hesap çok daha ucuz.
 Buna karşılık bizim uçtan uca gecikmemizi hesap değil pencere uzunluğu
 belirliyor: 10 saniyelik pencere, 8.8 ms yanıt süresinin bin katından fazla.
+
+### İki makineyle çalıştırma
+
+Sunucu WESAD veri setine **ihtiyaç duymaz**. Veri tamamen istemcide kalır,
+sunucuya yalnızca ham sinyal parçaları akar. İkinci makinede gereken:
+
+```bash
+git clone https://github.com/SenaCindioglu/files.git
+cd files
+pip install torch numpy psutil
+python -m serving.server --host 0.0.0.0 --port 9099
+```
+
+`--host 0.0.0.0` şart; varsayılan `127.0.0.1` yalnızca aynı makineden bağlantı
+kabul eder. Windows güvenlik duvarı ilk çalıştırmada izin soracaktır.
+
+İstemci tarafında (veri setinin olduğu makine):
+
+```bash
+python run_fog_experiment.py --server-host 192.168.1.42 --subject S11 --realtime --tag wifi_1user
+```
+
+`--server-host` verildiğinde sunucu yerelde başlatılmaz, sadece istemciler
+koşar.
+
+**Saat farkı ve ölçüm belirsizliği.** İki makinenin yüksek çözünürlüklü
+sayaçları birbirinden bağımsızdır. Bağlantı başında NTP mantığıyla fark
+ölçülür (12 tur, en düşük gidiş-dönüş süresine sahip tur seçilir) ve tek yönlü
+gecikmeye uygulanır. Belirsizlik gidiş-dönüş süresinin yarısı kadardır ve
+rapora yazılır:
+
+| Bağlantı | tipik RTT | latency belirsizliği |
+|---|---|---|
+| loopback | 0.26 ms | ±0.13 ms |
+| Ethernet | 0.5–2 ms | ±0.25–1 ms |
+| Wi-Fi | 2–20 ms | ±1–10 ms |
+
+Wi-Fi'da tek yönlü gecikmenin hata payı, ölçülen değerin kendisiyle aynı
+mertebeye çıkabilir. **Bundan etkilenmeyen metrikler**: execution time ve
+queuing delay (ikisi de sunucu saati), response time ve jitter (ikisi de
+istemci saati). Ölçüm kalitesi önemliyse Ethernet tercih edilmelidir.
+
+**Ne ölçmüş olursun, ne ölçmemiş olursun.** İki normal bilgisayar arasındaki
+deney gerçek ağ gecikmesini, jitter'ı ve bant genişliğini verir. Ama bu bir
+*dağıtık yerleşim* ölçümüdür, *fog düğümü* ölçümü değildir. Fog'un tanımındaki
+kaynak kısıtı yoktur. Raporda bu ayrım açıkça belirtilmelidir. Kaynak kısıtını
+donanımsız taklit etmek gerekirse sunucu Docker altında `--cpus=1 --memory=1g`
+ile çalıştırılabilir; bu da taklit olduğu belirtilerek raporlanır.
