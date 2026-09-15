@@ -482,7 +482,7 @@ Bu, birkaç günlük değil birkaç haftalık bir iş ve donanım gerektirir. Te
 kapsamında **fizibilite bölümü** olarak yukarıdaki sayılarla raporlanması,
 tam port yapmaktan çok daha iyi bir maliyet-fayda dengesi sunar.
 
-## Raspberry Pi kurulumu (fog düğümü)
+## Fog düğümü kurulumu (Raspberry Pi veya ikinci bilgisayar)
 
 Sunucu Pi'de, istemci veri setinin olduğu makinede çalışır. **Pi'ye WESAD
 verisi kopyalamaya gerek yok**, sadece depo ve PyTorch yeterli.
@@ -633,3 +633,66 @@ sadık kalır ve gerçek dağıtım koşullarını yansıtır. Kablo ise saat fa
 belirsizliğini birkaç kat azaltır, yani latency ölçümü çok daha güvenilir olur.
 En iyisi ikisini de koşup ayrı raporlamak; `--deployment fog_wifi=<ip>
 fog_eth=<ip>` şeklinde iki ayrı tur yeterli.
+
+### Fog düğümü olarak ikinci bir bilgisayar
+
+Raspberry Pi yerine elindeki başka bir bilgisayarı da kullanabilirsin. Tek şart
+ayrı bir fiziksel makine olması; aynı makinedeki sanal makine ya da konteyner
+gerçek ağ üretmez.
+
+İkinci bilgisayarda (Windows ya da Linux fark etmez):
+
+```bash
+git clone https://github.com/SenaCindioglu/files.git
+cd files
+pip install -r requirements.txt
+python -m serving.server --host 0.0.0.0 --port 9099
+```
+
+Sunucu açılışta kendi IP adreslerini ve istemci tarafında çalıştırman gereken
+komutu yazar, ayrıca `ipconfig` çalıştırmana gerek yok. Birden fazla adres
+varsa kullanılabilir olanı işaretler; `169.254.` ile başlayanlar bağlantı-yerel
+adreslerdir ve başka cihazdan erişilemez.
+
+**Windows güvenlik duvarı.** İlk çalıştırmada izin penceresi çıkar, "Özel ağlar"
+için izin vermelisin. Pencere çıkmazsa ya da yanlışlıkla reddedildiyse:
+
+```powershell
+New-NetFirewallRule -DisplayName "WESAD fog server" -Direction Inbound `
+    -Protocol TCP -LocalPort 9099 -Action Allow -Profile Private
+```
+
+**İki makine aynı ağda olmalı.** Aynı Wi-Fi ya da aynı yönlendirici yeterli.
+Misafir ağı (guest network) cihazları birbirinden yalıtır, orada çalışmaz.
+
+### Güçlü makineyi fog düğümü gibi kısıtlamak
+
+İkinci bilgisayar güçlüyse ölçtüğün şey *dağıtık yerleşim* olur, *kaynak
+kısıtlı fog düğümü* değil. Makalenin argümanının yarısı düğümün zayıf olması.
+Bu eksiği kapatmak için sunucuyu tek çekirdeğe hapsedebilirsin:
+
+```powershell
+# Windows
+start /affinity 1 python -m serving.server --host 0.0.0.0 --threads 1
+```
+
+```bash
+# Linux
+taskset -c 0 python -m serving.server --host 0.0.0.0 --threads 1
+```
+
+`--threads 1` PyTorch'un kaç iş parçacığı kullanacağını sınırlar, çekirdek
+kilitleme ise işletim sisteminin o süreci tek çekirdekte tutmasını sağlar.
+İkisi birlikte Pi sınıfı bir düğümü kabaca taklit eder.
+
+Bu bir **taklittir** ve raporda böyle belirtilmelidir. Yine de "güçlü bir
+masaüstünde ölçtük" demekten çok daha savunulabilir bir kurulumdur. En temizi
+iki koşuyu da yapıp yan yana vermek:
+
+```bash
+python compare_deployments.py --subject S11 --realtime --max-ticks 600 --repeat 3 \
+    --deployment edge=local fog_tam=192.168.1.8 fog_kisitli=192.168.1.8 --tag kisit
+```
+
+(İkinci ve üçüncü yerleşim için sunucuyu sırayla normal ve kısıtlı modda
+başlatman gerekir.)

@@ -92,6 +92,42 @@ def hardware_info():
     return info
 
 
+def local_addresses():
+    """
+    Bu makinenin baska cihazlardan erisilebilir IPv4 adresleri.
+
+    Sunucu 0.0.0.0'a baglandiginda kullanicinin istemci tarafina hangi adresi
+    yazacagini bilmesi gerekiyor; bunu ayrica ipconfig/hostname kosmadan
+    ogrenebilsin diye aciliste basiliyor.
+    """
+    addrs = []
+    if _HAS_PSUTIL:
+        try:
+            import socket as _s
+            for iface, entries in psutil.net_if_addrs().items():
+                for e in entries:
+                    if e.family == _s.AF_INET and not e.address.startswith('127.'):
+                        addrs.append((iface, e.address))
+        except Exception:
+            pass
+
+    def rank(item):
+        # 169.254.x.x baglanti-yerel (APIPA) adresleridir: DHCP alinamadiginda
+        # atanir ve baska cihazdan genelde erisilemez. Gercek yerel ag
+        # adresleri (192.168 / 10 / 172.16-31) one alinir.
+        ip = item[1]
+        if ip.startswith('169.254.'):
+            return 2
+        if ip.startswith(('192.168.', '10.')):
+            return 0
+        if ip.startswith('172.'):
+            second = int(ip.split('.')[1]) if ip.split('.')[1].isdigit() else 0
+            return 0 if 16 <= second <= 31 else 1
+        return 1
+
+    return sorted(addrs, key=rank)
+
+
 def resource_summary(sampler):
     """Ornekleyiciden CPU ve bellek ozeti.
 
@@ -316,7 +352,22 @@ async def main_async(args):
     print(f"Pencere/hop  : {cfg.WINDOW_SIZE} / {cfg.HOP_SIZE} ornek @ {cfg.TARGET_RATE} Hz")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
     print("=" * 66)
-    print("Hazir, istemci bekleniyor. Durdurmak icin Ctrl+C.")
+    if args.host in ('0.0.0.0', '::'):
+        addrs = local_addresses()
+        if addrs:
+            print("\nIstemci tarafinda kullanilacak adres(ler):")
+            for iface, ip in addrs:
+                note = "  <- muhtemelen bu" if ip == addrs[0][1] else (
+                    "  (baglanti-yerel, muhtemelen erisilemez)"
+                    if ip.startswith('169.254.') else "")
+                print(f"    {ip:<16}  ({iface}){note}")
+            print("\nDiger makinede ornek komut:")
+            print("    python compare_deployments.py --subject S11 --realtime \\")
+            print(f"        --deployment edge=local fog={addrs[0][1]}:{args.port} --tag edge_vs_fog")
+        else:
+            print("\n[!] Yerel IP adresi bulunamadi; 'ipconfig' (Windows) ya da")
+            print("    'hostname -I' (Linux) ile ogren.")
+    print("\nHazir, istemci bekleniyor. Durdurmak icin Ctrl+C.")
 
     async with server:
         await server.serve_forever()
