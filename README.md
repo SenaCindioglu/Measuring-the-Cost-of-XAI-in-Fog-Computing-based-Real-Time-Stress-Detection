@@ -578,3 +578,58 @@ Aynı deneyi üç yerleşimde koşup yan yana koy:
 Makalenin de yaptığı karşılaştırma bu. Bulut ayağı için küçük bir VPS aylık
 birkaç dolar; bütçe yoksa o satır atlanıp edge ile fog karşılaştırılabilir,
 eksik olduğu raporda belirtilir.
+
+## Yerleşim karşılaştırması (edge / fog / cloud)
+
+`compare_deployments.py` aynı deneyi birden fazla yerleşimde koşar ve tek
+karşılaştırma tablosu üretir.
+
+```bash
+# Pi'de sunucuyu başlat, açık bırak
+python -m serving.server --host 0.0.0.0 --port 9099
+
+# Kendi makinende
+python compare_deployments.py --subject S11 --realtime --max-ticks 600 \
+    --repeat 3 --deployment edge=local fog=192.168.1.42 --tag edge_vs_fog
+```
+
+`local` yazılan yerleşimde sunucu otomatik başlatılıp koşu sonunda kapatılır.
+Diğer adreslerde sunucunun o makinede zaten çalışıyor olması gerekir; script
+başlamadan önce erişimi kontrol eder ve ulaşamıyorsa hemen hata verir.
+
+Bulut eklemek istersen tek satır yeter: `--deployment edge=local
+fog=192.168.1.42 cloud=203.0.113.7`
+
+**Adil ölçüm için iki kural script'in içinde uygulanır.** Tüm yerleşimler aynı
+denek, aynı tick, aynı süre ve aynı ısınma sayısıyla koşar; değişen tek şey
+sunucunun yeri. Koşular dönüşümlü sırada yapılır (tur 1: edge, fog / tur 2:
+edge, fog), böylece işlemci ısınmasından kaynaklanan kayma tüm ortamlara eşit
+dağılır. Ardışık koşulsaydı en son ölçülen ortam sistematik olarak yavaş
+görünürdü.
+
+Çıktıda her metrik medyan ve tekrarlar arası yayılımla birlikte verilir.
+Ortamlar arası fark yayılımın altında kalıyorsa script bunu açıkça söyler.
+
+### Makalenin donanımı ve bizim karşılığımız
+
+| Makale | Rol | Bizde |
+|---|---|---|
+| Asus ROG (Ryzen 7, 16 GB, Win 11) | istemci | kendi dizüstün |
+| Raspberry Pi 4 (8 GB) | **worker** | senin Pi'n |
+| Raspberry Pi 4 (8 GB) | broker | **yok, gerekmiyor** |
+| DigitalOcean VPS (Frankfurt) | cloud | şimdilik atlandı |
+| Wi-Fi modem (100/5 Mbps) | ağ | ev yönlendiricin |
+
+**Broker neden gerekmiyor.** Makalenin mimarisinde broker, gelen istekleri en
+az yüklü worker'a dağıtan bir yönlendirici. Tek worker varken dağıtacak bir
+şey yok, sadece fazladan bir sıçrama eklemiş olursun. Makalenin kendi
+sonuçlarında da broker ile worker sayıları neredeyse aynı çıkmış (43.9 ms'ye
+karşı 43.3 ms), çünkü ikisi de aynı donanım ve broker hesabı kendisi yapıyor.
+Broker ancak iki veya daha fazla worker'ın olduğu, yük dağıtımının ölçüldüğü
+bir deneyde anlam kazanır.
+
+**Ağ tercihi: kablo mu Wi-Fi mı.** İkisinin de gerekçesi var. Wi-Fi makaleye
+sadık kalır ve gerçek dağıtım koşullarını yansıtır. Kablo ise saat farkı
+belirsizliğini birkaç kat azaltır, yani latency ölçümü çok daha güvenilir olur.
+En iyisi ikisini de koşup ayrı raporlamak; `--deployment fog_wifi=<ip>
+fog_eth=<ip>` şeklinde iki ayrı tur yeterli.
