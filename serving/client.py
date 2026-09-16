@@ -53,11 +53,17 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     # Sunucu saatiyle aramizdaki farki olc. Latency bunsuz hesaplanamaz.
     clock_offset, clock_rtt = await P.measure_clock_offset(reader, writer)
 
+    tag = f"[{args.subject}]"
+    eta = f", tahmini {n_ticks * tick_s / 60:.1f} dk" if args.realtime else ""
+    print(f"{tag} baglandi, {n_ticks} tick gonderilecek{eta}", flush=True)
+
     records = []
     bytes_sent = bytes_recv = 0
     cursor = {name: 0 for name, _, _ in NATIVE_STREAMS}
     elapsed_s = 0.0
     t_wall0 = time.perf_counter()
+    PROGRESS_EVERY_S = 10.0
+    t_next_progress = t_wall0 + PROGRESS_EVERY_S
 
     for msg_id in range(n_ticks):
         chunks = {}
@@ -107,6 +113,17 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
             rec['stages'] = rep.get('stages')
 
         records.append(rec)
+
+        # Olcum zaman damgalarindan sonra basilir; realtime'da bekleme suresi
+        # bunu emer, yani olculen metrikleri etkilemez.
+        now = time.perf_counter()
+        if now >= t_next_progress:
+            t_next_progress = now + PROGRESS_EVERY_S
+            done = msg_id + 1
+            left = (f", kalan ~{(n_ticks - done) * tick_s / 60:.1f} dk"
+                    if args.realtime else "")
+            print(f"{tag} tick {done}/{n_ticks} (%{100 * done / n_ticks:.0f}), "
+                  f"son response {rec['response_ms']:.1f} ms{left}", flush=True)
 
         if args.realtime:
             target = t_wall0 + (msg_id + 1) * tick_s
