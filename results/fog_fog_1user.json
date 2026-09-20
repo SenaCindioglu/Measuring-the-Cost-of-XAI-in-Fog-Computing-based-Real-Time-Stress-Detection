@@ -1,0 +1,171 @@
+{
+ "clock_sync": {
+  "offset_ns": 410430145202200,
+  "rtt_ns": 1428000,
+  "uncertainty_ms": 0.714
+ },
+ "server": {
+  "hardware": {
+   "platform": "Windows-10-10.0.22631-SP0",
+   "machine": "AMD64",
+   "processor": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+   "python": "3.10.5",
+   "torch": "2.14.0+cpu",
+   "cpu_count": 12,
+   "torch_threads": 1,
+   "total_ram_mb": 16235.3,
+   "cpu_mhz_max": 2592.0
+  },
+  "resources": {
+   "process_cpu_percent": {
+    "mean": 0.04080801834531447,
+    "max": 12.5,
+    "p95": 0.0,
+    "n_samples": 38811
+   },
+   "process_rss_mb": {
+    "mean": 193.06353405767695,
+    "max": 195.66796875
+   },
+   "system_cpu_percent": 6.0,
+   "system_memory_percent": 64.7,
+   "process_memory_percent": 1.21
+  },
+  "sessions_peak": 1
+ },
+ "n_packets": 10466,
+ "n_predictions": 1045,
+ "n_measured": 1030,
+ "n_warmup_excluded": 15,
+ "wall_seconds": 5233.040167300031,
+ "metrics": {
+  "latency": {
+   "mean_ms": -2.7259982524271837,
+   "median_ms": -8.7515,
+   "p95_ms": 57.53806499999999,
+   "p99_ms": 97.538623,
+   "min_ms": -24.4637,
+   "max_ms": 158.7235,
+   "std_ms": 24.487741898840927,
+   "jitter_mean_abs_delta_ms": 16.484122254616135
+  },
+  "queuing": {
+   "mean_ms": 0.04016398058252427,
+   "median_ms": 0.0394,
+   "p95_ms": 0.046454999999999996,
+   "p99_ms": 0.0699050000000002,
+   "min_ms": 0.0338,
+   "max_ms": 0.1115,
+   "std_ms": 0.005811564774295865,
+   "jitter_mean_abs_delta_ms": 0.0034668610301263362
+  },
+  "execution": {
+   "mean_ms": 3.753427378640777,
+   "median_ms": 3.6214500000000003,
+   "p95_ms": 4.432525,
+   "p99_ms": 4.887544000000004,
+   "min_ms": 3.2463,
+   "max_ms": 6.441,
+   "std_ms": 0.3627935577723089,
+   "jitter_mean_abs_delta_ms": 0.3315953352769679
+  },
+  "response": {
+   "mean_ms": 17.161420582524272,
+   "median_ms": 8.3459,
+   "p95_ms": 80.21688999999998,
+   "p99_ms": 120.79755200000002,
+   "min_ms": 5.7261,
+   "max_ms": 201.0351,
+   "std_ms": 24.97941785608575,
+   "jitter_mean_abs_delta_ms": 18.53674781341108
+  }
+ },
+ "bandwidth": {
+  "bytes_sent": 120913698,
+  "bytes_recv": 1573952,
+  "kbps_sent": 184.84658116031244,
+  "kbps_recv": 2.4061760654316937,
+  "kbps_total": 187.25275722574412
+ },
+ "server_stages": {
+  "resampling": {
+   "mean_ms": 1.087582133511461,
+   "median_ms": 1.0703500593081117,
+   "p95_ms": 1.2105050846002996,
+   "p99_ms": 1.3165960134938361,
+   "min_ms": 0.951599795371294,
+   "max_ms": 1.847200095653534,
+   "std_ms": 0.07570949551755286,
+   "jitter_mean_abs_delta_ms": 0.06751681291529922
+  },
+  "preprocessing": {
+   "mean_ms": 0.1795011647136032,
+   "median_ms": 0.17990008927881718,
+   "p95_ms": 0.18595507135614753,
+   "p99_ms": 0.22426099516451392,
+   "min_ms": 0.1580999232828617,
+   "max_ms": 0.611600000411272,
+   "std_ms": 0.019818510699190845,
+   "jitter_mean_abs_delta_ms": 0.008221679485689911
+  },
+  "tensor_prep": {
+   "mean_ms": 0.11773504615191696,
+   "median_ms": 0.11790008284151554,
+   "p95_ms": 0.12230001157149673,
+   "p99_ms": 0.14591001439839604,
+   "min_ms": 0.10710000060498714,
+   "max_ms": 0.3043999895453453,
+   "std_ms": 0.009003795338447544,
+   "jitter_mean_abs_delta_ms": 0.004479400243382065
+  },
+  "inference": {
+   "mean_ms": 2.1130855367021653,
+   "median_ms": 1.9897500751540065,
+   "p95_ms": 2.684410067740828,
+   "p99_ms": 2.898640937637538,
+   "min_ms": 1.79460016079247,
+   "max_ms": 4.696900025010109,
+   "std_ms": 0.3029388151554695,
+   "jitter_mean_abs_delta_ms": 0.2660864913895857
+  },
+  "postprocessing": {
+   "mean_ms": 0.05311261708802969,
+   "median_ms": 0.05219993181526661,
+   "p95_ms": 0.05860996898263692,
+   "p99_ms": 0.07842796621844197,
+   "min_ms": 0.04640012048184872,
+   "max_ms": 0.2578999847173691,
+   "std_ms": 0.01020056352454469,
+   "jitter_mean_abs_delta_ms": 0.004188432760963866
+  }
+ },
+ "classification": {
+  "n_labeled": 604,
+  "accuracy": 0.9519867549668874,
+  "stress_precision": 1.0,
+  "stress_recall": 0.7867647058823529,
+  "stress_f1": 0.8806584362139918,
+  "confusion": {
+   "tn": 468,
+   "fp": 0,
+   "fn": 29,
+   "tp": 107
+  }
+ },
+ "subject": "S11",
+ "config": {
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "tick_ms": 500,
+  "norm_mode": "running",
+  "realtime": true,
+  "threads": 1,
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "server": "192.168.1.14:9099",
+  "local_server": false,
+  "clock_synced": false,
+  "total_wall_s": 5233.06876049994
+ }
+}

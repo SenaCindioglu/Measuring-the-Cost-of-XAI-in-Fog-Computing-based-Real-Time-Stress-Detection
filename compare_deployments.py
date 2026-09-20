@@ -101,7 +101,8 @@ def start_local_server(args, host, port):
 def one_deployment_run(args, cfg, loaded, subjects, host, port):
     ca_list = [_ClientArgs(host=host, port=port, subject=s,
                            tick_ms=args.tick_ms, norm_mode=args.norm_mode,
-                           realtime=args.realtime, max_ticks=args.max_ticks)
+                           realtime=args.realtime, max_ticks=args.max_ticks,
+                           clock_resync_s=args.clock_resync_s)
                for s in subjects]
     results = asyncio.run(run_all(ca_list, cfg, loaded))
     summaries = []
@@ -128,6 +129,8 @@ def main():
                         help="Yalnizca YEREL sunucu icin; uzak sunucunun ipligi orada ayarlanir")
     parser.add_argument('--realtime', action='store_true')
     parser.add_argument('--max-ticks', type=int, default=0)
+    parser.add_argument('--clock-resync-s', type=float, default=60.0,
+                        help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
     parser.add_argument('--tag', default='deployments')
     args = parser.parse_args()
 

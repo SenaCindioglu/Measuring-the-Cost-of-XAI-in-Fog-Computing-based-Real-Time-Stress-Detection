@@ -388,6 +388,17 @@ sayaçları birbirinden bağımsızdır. Bağlantı başında NTP mantığıyla 
 gecikmeye uygulanır. Belirsizlik gidiş-dönüş süresinin yarısı kadardır ve
 rapora yazılır:
 
+**Kayma (drift) ve periyodik yeniden ölçüm.** Tek bir ölçüm uzun koşularda
+yetmez: iki kristal birebir aynı hızda tiklemediği için fark zamanla kayar. 87
+dakikalık bir Wi-Fi koşusunda kayma latency medyanını **negatife** düşürdü, yani
+metrik geçersiz oldu. Bu yüzden saat farkı varsayılan olarak her 60 saniyede bir
+yeniden ölçülür (`--clock-resync-s`, 0 = kapalı) ve her paketin latency'si iki
+ölçüm arasında doğrusal ara değerle düzeltilir. Ölçüm, son cevap alındıktan
+sonraki sessiz anda yapılır ve dört turdan oluşur, böylece akışı neredeyse hiç
+kesmez. Özette toplam kayma ve kayma hızı (ppm) yazılır, ayrıca latency medyanı
+`(response − execution − queuing) / 2` ile karşılaştırılıp tutarlılık kontrolü
+basılır. Negatif medyan görülürse uyarı verilir.
+
 | Bağlantı | tipik RTT | latency belirsizliği |
 |---|---|---|
 | loopback | 0.26 ms | ±0.13 ms |
@@ -672,7 +683,14 @@ kısıtlı fog düğümü* değil. Makalenin argümanının yarısı düğümün
 Bu eksiği kapatmak için sunucuyu tek çekirdeğe hapsedebilirsin:
 
 ```powershell
-# Windows
+# Windows (PowerShell)
+$p = Start-Process python -ArgumentList "-m serving.server --host 0.0.0.0 --threads 1" -PassThru
+$p.ProcessorAffinity = 1        # yalnizca 0. cekirdek
+```
+
+```bat
+REM Windows (cmd). PowerShell'de calismaz, "start" orada Start-Process'e
+REM cevrilir ve /affinity diye bir parametresi yoktur.
 start /affinity 1 python -m serving.server --host 0.0.0.0 --threads 1
 ```
 
@@ -690,9 +708,17 @@ masaüstünde ölçtük" demekten çok daha savunulabilir bir kurulumdur. En tem
 iki koşuyu da yapıp yan yana vermek:
 
 ```bash
+# 1) Sunucu normal modda acikken
 python compare_deployments.py --subject S11 --realtime --max-ticks 600 --repeat 3 \
-    --deployment edge=local fog_tam=192.168.1.8 fog_kisitli=192.168.1.8 --tag kisit
+    --deployment edge=local fog=192.168.1.8 --tag fog_tam
+
+# 2) Sunucuyu kapat, tek cekirdege kilitleyip yeniden baslat, sonra
+python compare_deployments.py --subject S11 --realtime --max-ticks 600 --repeat 3 \
+    --deployment edge=local fog=192.168.1.8 --tag fog_kisitli
 ```
 
-(İkinci ve üçüncü yerleşim için sunucuyu sırayla normal ve kısıtlı modda
-başlatman gerekir.)
+**İki ölçüm tek komuta sığmaz.** Script koşuları dönüşümlü sırada yapar (tur 1:
+edge, fog / tur 2: edge, fog), yani aynı adres iki yerleşim adıyla verilirse her
+turda sunucuyu normal ve kısıtlı mod arasında elle değiştirmen gerekirdi. Bu
+yüzden iki ayrı çalıştırma yapılır; edge her ikisinde tekrarlandığı için iki
+tablo yine karşılaştırılabilir kalır.

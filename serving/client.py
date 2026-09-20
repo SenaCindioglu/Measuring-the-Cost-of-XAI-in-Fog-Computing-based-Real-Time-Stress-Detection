@@ -34,6 +34,62 @@ from data.loader import load_wesad_subject_native, NATIVE_STREAMS, LABEL_RATE
 from serving import protocol as P
 
 
+CLOCK_RESYNC_S = 60.0     # saat farki kac saniyede bir yeniden olculur
+
+
+def _offset_at(t_ns, samples):
+    """Verilen istemci saati anindaki saat farkini tahmin eder.
+
+    Iki olcum arasinda DOGRUSAL ara deger kullanilir: kayma (drift) iki
+    kristal arasindaki sabit hiz farkindan gelir, yani zamanla duzgun
+    ilerler. Olculen aralik disinda en yakin olcum kullanilir.
+    """
+    if not samples:
+        return 0
+    if len(samples) == 1 or t_ns <= samples[0]['t_local_ns']:
+        return samples[0]['offset_ns']
+    if t_ns >= samples[-1]['t_local_ns']:
+        return samples[-1]['offset_ns']
+    for a, b in zip(samples, samples[1:]):
+        if a['t_local_ns'] <= t_ns <= b['t_local_ns']:
+            span = b['t_local_ns'] - a['t_local_ns']
+            if span <= 0:
+                return a['offset_ns']
+            w = (t_ns - a['t_local_ns']) / span
+            return a['offset_ns'] + w * (b['offset_ns'] - a['offset_ns'])
+    return samples[-1]['offset_ns']
+
+
+def _clock_report(samples, resync_every_s):
+    """Saat olcumlerinden ozet: belirsizlik, toplam kayma, kayma hizi."""
+    if not samples:
+        return {'offset_ns': 0, 'rtt_ns': 0, 'uncertainty_ms': 0.0, 'n_samples': 0}
+    rtts = sorted(s['rtt_ns'] for s in samples)
+    rtt_med = rtts[len(rtts) // 2]
+    span_s = (samples[-1]['t_local_ns'] - samples[0]['t_local_ns']) / 1e9
+    drift_ns = samples[-1]['offset_ns'] - samples[0]['offset_ns']
+    return {
+        # Geriye uyumluluk: ilk olcum, eski alan adlariyla
+        'offset_ns': int(samples[0]['offset_ns']),
+        'rtt_ns': int(rtt_med),
+        'uncertainty_ms': rtt_med / 2 / 1e6,
+        # Periyodik yeniden olcumden gelenler
+        'method': 'periodik yeniden olcum + dogrusal ara deger',
+        'resync_every_s': resync_every_s,
+        'n_samples': len(samples),
+        'span_s': span_s,
+        'rtt_min_ns': int(rtts[0]),
+        'rtt_max_ns': int(rtts[-1]),
+        'drift_ns': int(drift_ns),
+        'drift_ms': drift_ns / 1e6,
+        # Kaymanin hizi: iki kristal arasindaki bagil frekans farki
+        'drift_ppm': (drift_ns / (span_s * 1e3)) if span_s > 0 else 0.0,
+        'samples': [{'t_rel_s': (s['t_local_ns'] - samples[0]['t_local_ns']) / 1e9,
+                     'offset_ns': int(s['offset_ns']), 'rtt_ns': int(s['rtt_ns'])}
+                    for s in samples],
+    }
+
+
 async def run_client(args, cfg, streams, raw_labels, client_id):
     per_tick = P.samples_per_tick(NATIVE_STREAMS, args.tick_ms)
     tick_s = args.tick_ms / 1000.0
@@ -51,7 +107,16 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     await writer.drain()
 
     # Sunucu saatiyle aramizdaki farki olc. Latency bunsuz hesaplanamaz.
+    #
+    # Olcum TEK SEFER yapilmaz: iki makinenin kristali birebir ayni hizda
+    # tiklemedigi icin fark zamanla kayar. 87 dakikalik bir kosuda bu kayma
+    # onlarca milisaniyeye ulasti ve latency medyani NEGATIF okundu, yani
+    # metrik gecersizdi. Bu yuzden olcum periyodik olarak tekrarlanir ve her
+    # paketin latency'si o ana ait ara deger ile duzeltilir.
+    resync_every_s = float(getattr(args, 'clock_resync_s', CLOCK_RESYNC_S) or 0.0)
     clock_offset, clock_rtt = await P.measure_clock_offset(reader, writer)
+    clock_samples = [{'t_local_ns': time.perf_counter_ns(),
+                      'offset_ns': clock_offset, 'rtt_ns': clock_rtt}]
 
     tag = f"[{args.subject}]"
     eta = f", tahmini {n_ticks * tick_s / 60:.1f} dk" if args.realtime else ""
@@ -64,6 +129,7 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     t_wall0 = time.perf_counter()
     PROGRESS_EVERY_S = 10.0
     t_next_progress = t_wall0 + PROGRESS_EVERY_S
+    t_next_resync = (t_wall0 + resync_every_s) if resync_every_s > 0 else float('inf')
 
     for msg_id in range(n_ticks):
         chunks = {}
@@ -90,8 +156,11 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
         rec = {
             'msg_id': rep['msg_id'],
             'predicted': rep['predicted'],
-            # Yalnizca latency saat farki duzeltmesi ister; digerleri ayni saatten
-            'latency_ms':   ((rep['t_recv'] - clock_offset) - t_send) / 1e6,
+            # Yalnizca latency saat farki duzeltmesi ister; digerleri ayni
+            # saatten. Latency kosu bitince, o ana ait saat farkiyla
+            # hesaplanir; ham damgalar bu yuzden saklanir.
+            't_send_ns': t_send,
+            't_recv_ns': rep['t_recv'],
             'queuing_ms':   (rep['t_start'] - rep['t_recv']) / 1e6,
             'execution_ms': (rep['t_end']   - rep['t_start']) / 1e6,
             'response_ms':  (t_reply - t_send) / 1e6,
@@ -125,11 +194,34 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
             print(f"{tag} tick {done}/{n_ticks} (%{100 * done / n_ticks:.0f}), "
                   f"son response {rec['response_ms']:.1f} ms{left}", flush=True)
 
+        # Saat farkini yeniden olc. Burasi guvenli an: son cevap alindi, bir
+        # sonraki paket henuz gonderilmedi, yani hatta bekleyen veri yok.
+        # Tur sayisi baslangictakinden az (4 yerine 12): amac akisi az
+        # kesmek, dogruluk zaten en dusuk RTT'li turdan geliyor.
+        if now >= t_next_resync:
+            t_next_resync = now + resync_every_s
+            off, rtt = await P.measure_clock_offset(reader, writer, rounds=4)
+            if rtt > 0:
+                clock_samples.append({'t_local_ns': time.perf_counter_ns(),
+                                      'offset_ns': off, 'rtt_ns': rtt})
+
         if args.realtime:
             target = t_wall0 + (msg_id + 1) * tick_s
             delay = target - time.perf_counter()
             if delay > 0:
                 await asyncio.sleep(delay)
+
+    # Kapanmadan once son bir olcum: kayma egrisinin sag ucu da bilinsin.
+    if resync_every_s > 0 and len(clock_samples) > 1:
+        off, rtt = await P.measure_clock_offset(reader, writer, rounds=4)
+        if rtt > 0:
+            clock_samples.append({'t_local_ns': time.perf_counter_ns(),
+                                  'offset_ns': off, 'rtt_ns': rtt})
+
+    # Latency'ler simdi hesaplanir: her paket icin o ana ait saat farki.
+    for rec in records:
+        off = _offset_at(rec['t_send_ns'], clock_samples)
+        rec['latency_ms'] = ((rec['t_recv_ns'] - off) - rec['t_send_ns']) / 1e6
 
     writer.write(P.pack_bye())
     await writer.drain()
@@ -150,8 +242,7 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
         pass
 
     wall_s = time.perf_counter() - t_wall0
-    clock = {'offset_ns': int(clock_offset), 'rtt_ns': int(clock_rtt),
-             'uncertainty_ms': clock_rtt / 2 / 1e6}
+    clock = _clock_report(clock_samples, resync_every_s)
     return records, bytes_sent, bytes_recv, wall_s, clock, server_stats
 
 
@@ -262,6 +353,20 @@ def print_summary(s, title=""):
         c = s['clock_sync']
         print(f"   saat farki    : {c['offset_ns'] / 1e6:.3f} ms "
               f"(belirsizlik +/-{c['uncertainty_ms']:.3f} ms)")
+        if c.get('n_samples', 1) > 1:
+            print(f"   saat kaymasi  : {c['drift_ms']:+.3f} ms / {c['span_s']:.0f} s "
+                  f"({c['drift_ppm']:+.2f} ppm, {c['n_samples']} olcum)")
+        # Tutarlilik kontrolu: tek yonlu gecikme, gidis-donusun yarisindan
+        # buyuk olamaz ve negatif olamaz. Ikisi de saat duzeltmesinin
+        # yeterli olup olmadigini gosterir.
+        lat, resp, ex, qu = m['latency'], m['response'], m['execution'], m['queuing']
+        if lat and resp and ex and qu:
+            net_rt = resp['median_ms'] - ex['median_ms'] - qu['median_ms']
+            print(f"   latency kontrol: olculen {lat['median_ms']:.3f} ms, "
+                  f"ag gidis-donusun yarisi {net_rt / 2:.3f} ms")
+            if lat['median_ms'] < 0:
+                print("   [!] latency medyani NEGATIF: saat duzeltmesi yetersiz. "
+                      "Bu sutun raporlanmamali, yerine yukaridaki tahmin kullanilmali.")
     b = s['bandwidth']
     print(f"   bant genisligi: gonderilen {b['kbps_sent']:.1f} kbps, "
           f"alinan {b['kbps_recv']:.1f} kbps, toplam {b['kbps_total']:.1f} kbps")
@@ -284,6 +389,8 @@ def main():
     parser.add_argument('--realtime', action='store_true',
                         help="Tick'ler arasinda gercek zaman bekle (sensor hizinda yukle)")
     parser.add_argument('--max-ticks', type=int, default=0, help="Test icin tick sayisini sinirla")
+    parser.add_argument('--clock-resync-s', type=float, default=CLOCK_RESYNC_S,
+                        help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
     parser.add_argument('--tag', default='client')
     args = parser.parse_args()
 
