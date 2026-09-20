@@ -47,6 +47,27 @@ class _ClientArgs:
         self.__dict__.update(kw)
 
 
+def check_enough_ticks(cfg, tick_ms, max_ticks, warmup_windows):
+    """Kosu, isinmadan sonra olculecek pencere birakacak kadar uzun mu?
+
+    Ilk tahmin pencere dolunca gelir (10 s), sonrasi her hop'ta (5 s) bir.
+    Cok kisa bir kosuda tum tahminler isinmaya gider, ozet bos kalir ve
+    rapor asamasinda cokerdi; bu yuzden basta kontrol edilir.
+    """
+    if not max_ticks:
+        return
+    fill = int(round(cfg.WINDOW_DURATION * 1000 / tick_ms))
+    per_window = max(1, int(round(cfg.HOP_DURATION * 1000 / tick_ms)))
+    n_pred = 0 if max_ticks < fill else 1 + (max_ticks - fill) // per_window
+    if n_pred <= warmup_windows:
+        need = fill + (warmup_windows + 1) * per_window
+        raise SystemExit(
+            f"--max-ticks {max_ticks} cok kisa: {n_pred} tahmin uretir, "
+            f"bunun {min(n_pred, warmup_windows)} tanesi isinma olarak dislanir "
+            f"ve olculecek pencere kalmaz.\n"
+            f"En az --max-ticks {need} kullan (ya da --warmup-windows degerini dusur).")
+
+
 def wait_for_port(host, port, timeout=20.0):
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -186,6 +207,8 @@ def main():
         print("    latency'nin belirsizligi gidis-donus suresinin yarisi kadardir.")
         print("    queuing/execution (sunucu saati) ve response (istemci saati) bundan etkilenmez.")
     print("=" * 70)
+
+    check_enough_ticks(cfg, args.tick_ms, args.max_ticks, args.warmup_windows)
 
     try:
         loaded = {}

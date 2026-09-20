@@ -50,7 +50,8 @@ import numpy as np
 from config import config
 from data.loader import load_wesad_subject_native
 from serving.client import summarize
-from run_fog_experiment import _ClientArgs, wait_for_port, run_all, aggregate
+from run_fog_experiment import (_ClientArgs, wait_for_port, run_all, aggregate,
+                                check_enough_ticks)
 
 DEFAULT_PORT = 9099
 
@@ -133,6 +134,8 @@ def main():
                         help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
     parser.add_argument('--tag', default='deployments')
     args = parser.parse_args()
+
+    check_enough_ticks(cfg, args.tick_ms, args.max_ticks, args.warmup_windows)
 
     deployments = [parse_deployment(d) for d in args.deployment]
     n_clients = args.clients or len(args.subject)
@@ -224,6 +227,21 @@ def main():
                 entry['server_rss_mb'] = spread(ram)
         if aggs[0].get('classification'):
             entry['classification'] = aggs[0]['classification']
+        # Saat olcumunun kalitesi: latency sutununun ne kadar guvenilir
+        # oldugunu yalnizca bu sayilar gosterir, o yuzden rapora giriyor.
+        clocks = [a['clock_sync'] for a in aggs if a.get('clock_sync')]
+        if clocks:
+            entry['clock'] = {
+                'uncertainty_ms': spread([c['uncertainty_ms'] for c in clocks]),
+                'drift_ms': spread([c.get('drift_ms', 0.0) for c in clocks]),
+                'drift_ppm': spread([c.get('drift_ppm', 0.0) for c in clocks]),
+                'n_samples': [c.get('n_samples', 1) for c in clocks],
+            }
+        # Tutarlilik kontrolu: tek yonlu gecikme, agdaki gidis-donusun
+        # yarisini gecemez ve negatif olamaz.
+        med = {k: entry['metrics'][k]['median']['median'] for k, _ in METRICS}
+        entry['latency_cross_check_ms'] = (
+            med['response'] - med['execution'] - med['queuing']) / 2
         report['by_deployment'][name] = entry
 
     print("\n" + "=" * 78)
@@ -249,6 +267,32 @@ def main():
         print(f"{name:<10}{dev:<34}"
               f"{(f'{cpu:.1f}' if cpu is not None else '-'):>9}"
               f"{(f'{ram:.0f}' if ram is not None else '-'):>12}")
+
+    # --- saat olcumu ve latency tutarliligi ---
+    if any('clock' in report['by_deployment'][n] for n, _, _, _ in deployments):
+        print(f"\n{'ortam':<10}{'belirsizlik':>13}{'kayma':>11}{'kayma hizi':>13}"
+              f"{'olcum':>8}{'latency':>10}{'capraz':>9}")
+        for name, _, _, _ in deployments:
+            e = report['by_deployment'][name]
+            c = e.get('clock')
+            lat = e['metrics']['latency']['median']['median']
+            cc = e['latency_cross_check_ms']
+            if not c:
+                print(f"{name:<10}{'-':>13}{'-':>11}{'-':>13}{'-':>8}"
+                      f"{lat:>10.3f}{cc:>9.3f}")
+                continue
+            print(f"{name:<10}"
+                  f"{c['uncertainty_ms']['median']:>13.3f}"
+                  f"{c['drift_ms']['median']:>11.3f}"
+                  f"{c['drift_ppm']['median']:>13.2f}"
+                  f"{int(np.median(c['n_samples'])):>8}"
+                  f"{lat:>10.3f}{cc:>9.3f}")
+        print("  (belirsizlik ve kayma ms; kayma hizi ppm; capraz = "
+              "(response - execution - queuing) / 2)")
+        for name, _, _, _ in deployments:
+            e = report['by_deployment'][name]
+            if e['metrics']['latency']['median']['median'] < 0:
+                print(f"  [!] {name}: latency medyani NEGATIF, saat duzeltmesi yetersiz.")
 
     # --- yorum ---
     print("\n" + "-" * 78)
