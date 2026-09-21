@@ -1,0 +1,74 @@
+{
+ "config": {
+  "subject": "S11",
+  "n_windows": 16,
+  "repeat": 3,
+  "threads": 1,
+  "device": "cpu",
+  "norm_mode": "causal",
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "model_params": 49890
+ },
+ "by_method": {
+  "lime": {
+   "explainer": {
+    "method": "lime",
+    "num_samples": 500,
+    "num_segments": 20,
+    "kernel_width": 0.5,
+    "seed": 0
+   },
+   "within_run": {
+    "mean_ms": 772.93455416293,
+    "median_ms": 710.1822499826085,
+    "p95_ms": 1129.9185299954843,
+    "p99_ms": 1161.2110740010394,
+    "min_ms": 637.1231999946758,
+    "max_ms": 1169.650299998466,
+    "std_ms": 147.2015417509967,
+    "n": 48
+   },
+   "across_runs": {
+    "median_of_run_medians": 732.2805500007235,
+    "min": 701.0417499986943,
+    "max": 755.5298500228673,
+    "range_pct": 7.440877683303101,
+    "runs": [
+     701.0417499986943,
+     755.5298500228673,
+     732.2805500007235
+    ]
+   }
+  },
+  "lime_ucuz": {
+   "explainer": {
+    "method": "lime",
+    "num_samples": 500,
+    "num_segments": 5,
+    "kernel_width": 0.25,
+    "seed": 0
+   },
+   "within_run": {
+    "mean_ms": 796.73927707942,
+    "median_ms": 677.6077000249643,
+    "p95_ms": 1203.5230949812103,
+    "p99_ms": 1233.372679995373,
+    "min_ms": 612.2162999818102,
+    "max_ms": 1244.627300009597,
+    "std_ms": 204.83906006143917,
+    "n": 48
+   },
+   "across_runs": {
+    "median_of_run_medians": 664.5424000162166,
+    "min": 652.4224499880802,
+    "max": 1112.1055000112392,
+    "range_pct": 69.17286993455069,
+    "runs": [
+     664.5424000162166,
+     1112.1055000112392,
+     652.4224499880802
+    ]
+   }
+  }
+ }
+}
