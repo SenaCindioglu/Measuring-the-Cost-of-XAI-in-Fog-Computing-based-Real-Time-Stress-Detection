@@ -498,7 +498,8 @@ def make_shap_explainer(model, background_windows, device):
     return explainer, 'GradientExplainer'
 
 
-def shap_explain(explainer, window, nsamples, target_class, device, num_classes=2):
+def shap_explain(explainer, window, nsamples, target_class, device, num_classes=2,
+                 seed=0):
     """Atif haritasini (C, T) olarak dondurur.
 
     SHAP surumden surume FARKLI SEKIL donduruyor ve onceki hali bunu yanlis
@@ -509,6 +510,16 @@ def shap_explain(explainer, window, nsamples, target_class, device, num_classes=
     devam etmek yerine hata verir.
     """
     x = torch.from_numpy(window).float().unsqueeze(0).to(device)
+
+    # SEED SABITLENMEK ZORUNDA. GradientExplainer her cagrida arka plan ile
+    # girdi arasinda rastgele `nsamples` nokta ornekler; seed sabit degilse
+    # AYNI pencere iki kez aciklandiginda farkli atif cikar. O zaman
+    # sensitivity metrigi (girdiye gurultu ekleyip atifin degisimini olcer)
+    # yontemin kendi rastgeleligini de sayar ve LIME ile karsilastirilamaz
+    # hale gelir -- LIME tarafinda maske ornekleme seed'i sabit tutuluyor.
+    # Kendi kararsizligi ayri bir metrik olarak olculuyor (self_instability).
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     sv = explainer.shap_values(x, nsamples=nsamples)
 
     if isinstance(sv, list):        # eski surum: sinif basina bir dizi
@@ -624,6 +635,21 @@ def compute_sensitivity(explain_fn, window, attribution, noise_scale=0.05,
 # BIR KONFIGURASYONU DEGERLENDIRME
 # ===============================================================
 
+def compute_self_instability(explain_fn, window, attribution):
+    """Ayni pencere yeniden aciklandiginda atif ne kadar degisiyor?
+
+    Girdi hic degismedigi icin deterministik bir yontemde sonuc 0'dir.
+    Sifirdan buyuk cikmasi, yontemin kendi ic ornekleme rastgeleliginin
+    aciklamayi oynattigi anlamina gelir. sensitivity bu tabanin uzerine
+    biner; ikisi ayri raporlanmazsa "kararsiz yontem" ile "girdiye duyarli
+    yontem" birbirine karisir.
+    """
+    attr2 = explain_fn(window)
+    flat = attribution.reshape(-1)
+    return float(np.linalg.norm(attr2.reshape(-1) - flat)
+                 / (np.linalg.norm(flat) + 1e-8))
+
+
 def evaluate_config(cfg_name, explain_fn, quality_explain_fn, eval_windows,
                     model, target_class, device,
                     n_sensitivity_windows, n_sensitivity_trials,
@@ -641,6 +667,13 @@ def evaluate_config(cfg_name, explain_fn, quality_explain_fn, eval_windows,
 
     if is_cuda:
         torch.cuda.reset_peak_memory_stats()
+
+    # ISINMA: ilk cagri her zaman yavastir (tembel yuklemeler, cache, BLAS
+    # ilk kurulum). Projedeki diger tum olcumlerde isinma pencereleri hariç
+    # tutuluyor; burada tutulmuyordu ve ilk pencere ortalamayi yukari
+    # cekiyordu. Sonucu kullanilmadigi icin tek cagri yeterli.
+    if len(eval_windows):
+        explain_fn(eval_windows[0])
 
     cpu_t0 = time.process_time()
     wall_t0 = time.perf_counter()
@@ -674,11 +707,13 @@ def evaluate_config(cfg_name, explain_fn, quality_explain_fn, eval_windows,
     cpu_percent = 100.0 * (cpu_t1 - cpu_t0) / max(wall_t1 - wall_t0, 1e-9)
 
     # Sensitivity: pahali oldugu icin sadece ilk n_sensitivity_windows pencerede
-    sens_list = []
+    sens_list, self_list = [], []
     for i in range(min(n_sensitivity_windows, len(eval_windows))):
         sens_list.append(compute_sensitivity(
             quality_explain_fn, eval_windows[i], attributions_cache[i],
             n_trials=n_sensitivity_trials))
+        self_list.append(compute_self_instability(
+            quality_explain_fn, eval_windows[i], attributions_cache[i]))
 
     lat = np.asarray(latencies)
     result = {
@@ -702,15 +737,22 @@ def evaluate_config(cfg_name, explain_fn, quality_explain_fn, eval_windows,
         'deletion_auc_mean': float(np.mean(del_list)),
         'insertion_auc_mean': float(np.mean(ins_list)),
         'sensitivity_mean': float(np.mean(sens_list)) if sens_list else None,
+        # Yontemin kendi kararsizligi: ayni girdi, degismis hicbir sey yok.
+        # Deterministik bir yontemde 0 cikar. sensitivity bunun uzerine
+        # binen girdi duyarliligidir; ikisi birlikte okunmali.
+        'self_instability_mean': float(np.mean(self_list)) if self_list else None,
     }
 
     if verbose:
         sens = result['sensitivity_mean']
         sens_txt = ("%.4f" % sens) if sens is not None else "-"
+        self_i = result['self_instability_mean']
+        self_txt = ("%.4f" % self_i) if self_i is not None else "-"
         print("    -> latency(mean/p95)=%.1f/%.1f ms | faithfulness=%.4f "
-              "| monotonicity=%.4f | sensitivity=%s"
+              "| monotonicity=%.4f | sensitivity=%s | kendi-kararsizlik=%s"
               % (result['latency_mean_ms'], result['latency_p95_ms'],
-                 result['faithfulness_mean'], result['monotonicity_mean'], sens_txt))
+                 result['faithfulness_mean'], result['monotonicity_mean'],
+                 sens_txt, self_txt))
     return result
 
 
@@ -919,7 +961,7 @@ def run_shap_ofat_sweep(model, eval_windows, background_pool, cfg):
 
 COMPARE_COLS = ['latency_mean_ms', 'latency_p95_ms', 'cpu_percent',
                 'rss_mb_max', 'gpu_peak_mb', 'faithfulness_mean',
-                'monotonicity_mean', 'sensitivity_mean']
+                'monotonicity_mean', 'sensitivity_mean', 'self_instability_mean']
 
 
 def print_comparison(df_lime, df_shap, lime_reco, shap_reco, cfg):
