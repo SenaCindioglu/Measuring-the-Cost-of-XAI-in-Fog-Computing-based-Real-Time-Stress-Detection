@@ -160,7 +160,94 @@ kaynaklar. Makaleye girmeden önce elle açılacak:
 
 ---
 
-## 6. Plana etkisi
+## 6. Fizyolojik sinyal ve gömülü donanımda XAI maliyeti
+
+Üçüncü tarama (21 Eylül) bu kesişimi aradı. Sonuç: kesişim neredeyse boş.
+
+### WESAD + açıklanabilirlik: hiçbiri süre vermiyor
+
+| Çalışma | XAI yöntemi | Süre / kaynak sayısı |
+|---|---|---|
+| **Almadhor ve ark. (2025)**, Front. Bioeng. Biotechnol., DOI 10.3389/fbioe.2025.1659002 — **WESAD + DREAMER, 1D-CNN** | Grad-CAM, Integrated Gradients, dikkat görselleştirme | **Hiçbiri.** Çıkarım süresi, XAI süresi, bellek, parametre sayısı, donanım: hiçbiri yok |
+| Velichko & Huyut (2026), BSPC 129, WESAD göğüs solunumu, kompakt 1D-CNN | yorumlanabilir otokorelasyon belirteçleri | Hiçbiri |
+| Oliver & Dakshit (2025), arXiv:2502.18733, WESAD, transformer | gömme uzayı görselleştirme | Hiçbiri |
+
+**Makalenin boşluk cümlesi için en güçlü kanıt birincisi:** bizim veri seti
+çiftimizi (WESAD + DREAMER) ve model ailemizi (1D-CNN) kullanan bir çalışma,
+üstelik XAI de uygulayan bir çalışma, hiçbir hesaplama maliyeti
+raporlamıyor.
+
+### Gömülü donanımda XAI maliyetini ölçen iki çalışma (ikisi de fizyolojik değil)
+
+| Çalışma | Donanım | Ölçülen |
+|---|---|---|
+| **Taguta ve ark. (2026)**, arXiv:2609.14036 | Raspberry Pi 4 fog düğümü | Koşullu SHAP **+%28 CPU**, toplam 555 ms, 0.7 Wh/tahmin. Soğuk zincir, 24 günlük canlı dağıtım |
+| **AlNusif (2025)**, IJECS 14(7) | RPi 4, Jetson Nano, Coral | RPi 4 + SHAP: temel 88 ms + **XAI 140 ms** = 228 ms, 130+ MB; RPi 4 + LIME: **~92 ms**, ~98 MB; Saliency <50 ms. "Gerçek zamanlı" ölçütü <200 ms |
+
+⚠️ AlNusif için uyarı: dergi düşük itibarlı ve tablolar kendi içinde tutarsız
+(aynı yapılandırma bir yerde 88 ms, başka yerde 42 ms temel gecikme; XAI yükü
+140 ms ve 95 ms olarak iki kez geçiyor). Tekrar sayısı, kütüphane sürümü,
+varyans yok. "Birileri bunu ölçmüş" demek için kullanılabilir, kesin değer
+olarak kullanılamaz.
+
+### Fizyolojik + gerçek gömülü donanım + XAI, ama süre ölçmeyenler
+
+- **EvoApneaFormer** (2026), Front. Bioeng. Biotechnol. — Raspberry Pi 4,
+  SHAP + Grad-CAM, çıkarım <50 ms, uçtan uca <300 ms, <2 W. Ama SHAP'ın
+  maliyeti çıkarımdan **ayrılmamış**.
+- **Ghose ve ark. (2025)**, Front. Digit. Health — Jetson Orin Nano, LIME,
+  yalnızca eğitim süreleri.
+
+### Sistem metrikleri + XAI maliyetini birlikte veren: yok
+
+Alan üç ayrık gruba bölünmüş:
+
+1. **Sistem metrikleri, XAI yok:** Hizem ve ark. (2025) RPi 4'te 0.200 ms,
+   %15.4 CPU, 193 KB; ve bizim referansımız Erzurumluoğlu ve ark. (ICACT
+   2025).
+2. **XAI maliyeti, ağ metriği yok:** AlNusif, Basaran & Dressler, ShaTS.
+3. **Fizyolojik sinyalde XAI, hiç maliyet yok:** yukarıdaki tablolar.
+
+**El Rashidy ve ark. (2025)**, Front. Comput. Sci. 7 özellikle iyi bir örnek:
+*fog mimarisinde duygu tanıma, LIME ve Grad-CAM ile*, ve hâlâ çıkarım başına
+gecikme ya da XAI maliyeti yok. Yani fog + XAI kesişiminde bile bu ölçüm
+atlanıyor.
+
+### Gerçek zamanlı sınır: test edilen mi, iddia edilen mi
+
+- **Test edilen (yalnızca iki):** ShaTS (1 s/pencere, ölçülüp KernelSHAP'ın
+  ihlal ettiği gösterilmiş) ve XAI-on-RAN (10 ms bütçe, SHAP aşıyor).
+- **Ölçülmeden iddia edilen:** AlNusif (<200 ms), EXGnet, El Rashidy,
+  Almadhor — "gerçek zamanlıya uygun" diyor, ölçüm yok.
+
+### Erişilemeyen ama değerli olabilecek kaynaklar
+
+Üniversite erişimi gerektiriyor, sayılar yalnızca arama özetinden:
+
+1. **MDPI Computers 15(3):139 (2026)**, DOI 10.3390/computers15030139 —
+   Raspberry Pi 4 + SHAP, 60 ms çıkarım iddiası. En yüksek öncelik.
+2. **Comput. Methods Programs Biomed. (2026)**, PMID 41719782 — "lightweight
+   stress monitoring for IoMT", SHAP + Raspberry Pi 5.
+3. **Biomed. Signal Process. Control (2026)**, S174680942600488X — stres
+   tespitinde SHAP + LIME + MC Dropout.
+4. **Wiley Adv. Intell. Syst.**, DOI 10.1002/aisy.70487 — açıklama katmanı
+   gecikmesi 210-300 ms, medyan 247 ms, p95 291 ms, 500 ms klinik eşiğine
+   karşı. Bizim çerçeveye çok yakın bir raporlama biçimi.
+
+### ⚠️ Referans makalenin kendisi bulunamadı
+
+Tarama, Erzurumluoğlu ve ark. ICACT 2025 makalesinin **erişilebilir bir
+kaydını bulamadı**. Tanımlanan iş (DREAMER, zaman temelli istatistiksel
+öznitelikler, 104 öznitelikle %84.21 ve 24 öznitelikle %79.70, fog/edge/cloud
+karşılaştırması) anlatımla uyuşuyor ama birincil kaynak açılamadı.
+
+**Yapılacak:** makalenin PDF'i hocadan istenecek. Tüm karşılaştırma tablomuz
+bu makaleye dayanıyor; sayılarını ve künyesini birincil kaynaktan
+doğrulamadan makaleye yazmak riskli.
+
+---
+
+## 7. Plana etkisi
 
 - **Faz D'ye eklenen iki ölçüm:** (1) ECE ile kalibrasyon kanıtı, (2)
   açıklama kararsızlığının yalnızca düşük güvenli pencerelerde ölçümü.
