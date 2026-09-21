@@ -148,6 +148,27 @@ olmayabilir; bu başarısızlık değil, muhtemel ana sonuç.
 | C4 | **Parametre taraması.** LIME örnek sayısı 100 / 250 / 500 / 1000 ve bölge sayısı (zaman dilimi 5 / 10 / 20 × 14 kanal). SHAP arka plan 10 / 50 / 100 (ve `nsamples` varsa 50 / 200). Her nokta: üç kalite metriği + süre p50/p95 + RSS, S11+S14 tam kayıt, 3 tekrar dönüşümlü. | `results/xai_sweep_lime.json`, `results/xai_sweep_shap.json` |
 | C5 | Pareto: kalite'ye karşı açıklama süresi, iki yöntem iki eğri, parametre noktaları işaretli. Aranan nokta: kalite az düşer, süre çok düşer. | şekil 2 |
 
+**Seçilen yapılandırmalar (21 Eylül 2026, GPU taraması, elle seçim).** Aşama
+sonlarında kalite–gecikme tablosu basılıp karar elle verildi; otomatik seçim
+yalnızca faithfulness'a baktığı için kullanılmadı.
+
+| Yöntem | Yapılandırma | Gecikme (GPU) | Faithfulness | En iyi kaliteye göre |
+|---|---|---|---|---|
+| LIME | 500 örnek, 5 dilim, kw 0.25 | 55.5 ms | 0.2370 | −%7, 4.3× hızlı |
+| SHAP | arka plan 100 (kmeans), nsamples 50 | 50.5 ms | 0.2287 | −%2.3, 7.7× hızlı |
+
+İkisi de artık aynı maliyette (~50 ms), yani karşılaştırma eşit bütçede
+yapılabiliyor. Eşit maliyette LIME daha sadık (0.2370'e karşı 0.2287) ve çok
+daha kararlı (sensitivity 0.0135'e karşı ~0.08).
+
+**Bunun Faz D'ye etkisi.** Açıklama 300 ms mertebesine inince (CPU tahmini),
+5 saniyelik hop bütçesinin yalnızca %6'sını tutuyor. Yani tek kullanıcıda
+seçici XAI'nin kazancı küçülür. Kazanç üç yerde ortaya çıkar: çok kullanıcıda
+(4 × 300 ms = 1.2 s), zayıf donanımda (Pi sınıfı düğüm birkaç kat yavaş) ve
+pahalı yapılandırmada. Bu yüzden D2 eşik taraması **iki maliyet noktasında**
+koşulmalı: seçilen ucuz yapılandırma ve kalite-maksimum yapılandırma. Tablo o
+zaman "seçici açıklama ne zaman gerekir" sorusunu da cevaplar.
+
 **LIME'ın ham sinyalde bölge tanımı.** Girdi 640×14 = 8 960 değişken; LIME'ı
 her örneği ayrı değişken sayarak koşmak hem çok pahalı hem anlamsız (tek bir
 örneğin katkısı yorumlanamaz). Görüntüdeki "süper piksel" karşılığı burada
