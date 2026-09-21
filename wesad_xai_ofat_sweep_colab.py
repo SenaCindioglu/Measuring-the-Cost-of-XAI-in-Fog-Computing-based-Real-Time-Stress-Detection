@@ -21,11 +21,22 @@ Kalite metrikleri (iki yontem icin de AYNI tanim):
     monotonicity  = insertion egrisinde azalmayan adim orani
     sensitivity   = girdiye kucuk gurultu eklenince atifin degisimi (dusuk iyi)
 
-Colab'da calistirma:
+Her asamanin sonunda uc yapilandirmanin gecikme + kalite tablosu basilir ve
+kazanani KULLANICI secer. Otomatik secim tek basina yaniltici: olculen
+degerlerde faithfulness farklari yuzde birkac iken gecikme katlarca degisiyor
+(ornek: SHAP nsamples 200 -> 400 kaliteye 0.0004 katti, gecikmeyi iki katina
+cikardi). Bos girilirse "dengeli oneri" uygulanir: kalitede en fazla
+QUALITY_TOLERANCE_PCT kayba izin verip icinde en hizli olani secmek.
+
+Colab'da calistirma (ELLE SECIM ICIN boyle cagir; `!python` ile stdin
+olmadigi icin sorular atlanir ve dengeli oneri otomatik secilir):
     from google.colab import drive
     drive.mount('/content/drive')
     !pip install shap --quiet
-    !python wesad_xai_ofat_sweep_colab.py
+    import wesad_xai_ofat_sweep_colab as w
+    w.main()
+
+Hic soru sorulmasin istiyorsan Config.INTERACTIVE = False.
 
 Model dosyasi /content altina dogrudan yuklendiyse ayrica bir sey yapmaya
 gerek yok; resolve_paths() orayi ilk sirada arar.
@@ -123,6 +134,14 @@ class Config:
     RESULTS_PATH = None
     LIME_SWEEP_CSV = None
     SHAP_SWEEP_CSV = None
+
+    # ---- Asama sonu secimi ----
+    # Her asamada uc yapilandirmanin gecikme + kalite tablosu basilir ve
+    # kazanani kullanici secer. Bos girilirse dengeli oneri uygulanir:
+    # kalitede en fazla QUALITY_TOLERANCE_PCT kayba izin verip icinde en
+    # hizli olani almak. INTERACTIVE=False yapilirsa hic sorulmaz.
+    INTERACTIVE = True
+    QUALITY_TOLERANCE_PCT = 2.0
 
 
 config = Config()
@@ -757,9 +776,95 @@ def evaluate_config(cfg_name, explain_fn, quality_explain_fn, eval_windows,
 
 
 def pick_best(df, metric='faithfulness_mean'):
-    """En yuksek faithfulness kazanir. Otomatik secim sadece baslangic
-    onerisidir; sweep CSV'sini inceleyip elle override edebilirsiniz."""
+    """En yuksek faithfulness kazanan satir (yalnizca referans olarak)."""
     return df.loc[df[metric].idxmax()]
+
+
+def balanced_pick(df, tol_pct):
+    """Kalite kaybi tolerans icinde kalan EN HIZLI yapilandirma.
+
+    Gerekce: taramada faithfulness farklari cok kucuk cikarken (yuzde birkac)
+    gecikme katlarca degisiyor. Ornek olculen degerler: SHAP nsamples 200 ->
+    400 faithfulness'a 0.0004 katti, gecikmeyi iki katina cikardi. Boyle bir
+    "kazanan" gercek zamanli sistem icin yanlis secim. Bu yuzden once kalitede
+    tolerans kadar kayba izin verilir, sonra icinde en hizli olan secilir.
+    """
+    best_f = df['faithfulness_mean'].max()
+    threshold = best_f - abs(best_f) * (tol_pct / 100.0)
+    cand = df[df['faithfulness_mean'] >= threshold]
+    return cand.loc[cand['latency_mean_ms'].idxmin()]
+
+
+def _short_label(config_name):
+    """'lime_stage1_samples250' -> 'samples250'"""
+    parts = config_name.split('_', 2)
+    return parts[2] if len(parts) > 2 else config_name
+
+
+def choose_stage_winner(df, cfg, stage_title):
+    """Asamanin sonuclarini tablo olarak basar ve kullaniciya sectirir.
+
+    Otomatik secim (en yuksek faithfulness) tek basina yanlis yonlendiriyor,
+    cunku gecikmeyi hic hesaba katmiyor. Karar insanda kalsin diye tablo
+    basilip input bekleniyor; bos girilirse dengeli oneri uygulanir.
+
+    stdin yoksa (Colab'da `!python script.py` ile calistirildiginda oyle olur)
+    input() EOF verir; o durumda dengeli oneri otomatik secilir ve bu acikca
+    yazilir. Elle secim istiyorsan defter hucresinde
+        import wesad_xai_ofat_sweep_colab as w; w.main()
+    seklinde cagir, `!python` ile degil.
+    """
+    df = df.reset_index(drop=True)
+    best_f_row = pick_best(df)
+    bal_row = balanced_pick(df, cfg.QUALITY_TOLERANCE_PCT)
+    best_f = float(best_f_row['faithfulness_mean'])
+    slowest = float(df['latency_mean_ms'].max())
+
+    print("\n  " + "-" * 92)
+    print("  SECIM: " + stage_title)
+    print("  %-3s %-22s %18s %13s %10s %10s %8s %8s"
+          % ("#", "yapilandirma", "gecikme ort/p95", "faithfulness",
+             "monoton.", "sensitiv.", "kalite", "hiz"))
+    for i, row in df.iterrows():
+        f = float(row['faithfulness_mean'])
+        d_pct = 100.0 * (f - best_f) / abs(best_f) if best_f else 0.0
+        quality_txt = "en iyi" if row.equals(best_f_row) else ("%+.1f%%" % d_pct)
+        speed = slowest / max(float(row['latency_mean_ms']), 1e-9)
+        sens = row.get('sensitivity_mean')
+        print("  %-3d %-22s %8.1f/%-9.1f %13.4f %10.4f %10s %8s %7.1fx"
+              % (i + 1, _short_label(row['config_name']),
+                 row['latency_mean_ms'], row['latency_p95_ms'],
+                 f, row['monotonicity_mean'],
+                 ("%.4f" % sens) if sens is not None else "-",
+                 quality_txt, speed))
+
+    bal_i = int(df.index[df['config_name'] == bal_row['config_name']][0]) + 1
+    best_i = int(df.index[df['config_name'] == best_f_row['config_name']][0]) + 1
+    print("  Dengeli oneri : #%d  (%s)  -- kalite kaybi %%%.0f toleransi icinde en hizli"
+          % (bal_i, _short_label(bal_row['config_name']), cfg.QUALITY_TOLERANCE_PCT))
+    print("  En yuksek kalite: #%d (%s)"
+          % (best_i, _short_label(best_f_row['config_name'])))
+    print("  " + "-" * 92)
+
+    if not cfg.INTERACTIVE:
+        print("  [otomatik] INTERACTIVE=False -> dengeli oneri secildi: #%d" % bal_i)
+        return bal_row
+
+    while True:
+        try:
+            raw = input("  Secimin [1-%d, bos = dengeli oneri #%d]: "
+                        % (len(df), bal_i)).strip()
+        except (EOFError, OSError):
+            print("\n  [stdin yok -> dengeli oneri secildi: #%d]" % bal_i)
+            return bal_row
+        if raw == "":
+            print("  -> #%d secildi (dengeli oneri)" % bal_i)
+            return bal_row
+        if raw.isdigit() and 1 <= int(raw) <= len(df):
+            sel = df.loc[int(raw) - 1]
+            print("  -> #%s secildi (%s)" % (raw, _short_label(sel['config_name'])))
+            return sel
+        print("  Gecersiz giris. 1-%d arasi bir sayi yaz ya da bos birak." % len(df))
 
 
 # ===============================================================
@@ -808,10 +913,10 @@ def run_lime_ofat_sweep(model, eval_windows, cfg):
 
     df1 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('lime_stage1')])
-    b1 = pick_best(df1)
+    b1 = choose_stage_winner(df1, cfg, "LIME sira 1 -- num_samples")
     best_samples = int(b1['num_samples'])
-    print("\n  >> Sira 1 kazanani: num_samples=%d (faithfulness=%.4f)"
-          % (best_samples, b1['faithfulness_mean']))
+    print("  >> Sira 1: num_samples=%d (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_samples, b1['faithfulness_mean'], b1['latency_mean_ms']))
 
     # ---- Sira 2: num_segments ----
     print("\n>>> SIRA 2: num_segments (num_samples=%d, kernel_width=%s sabit)"
@@ -824,10 +929,10 @@ def run_lime_ofat_sweep(model, eval_windows, cfg):
 
     df2 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('lime_stage2')])
-    b2 = pick_best(df2)
+    b2 = choose_stage_winner(df2, cfg, "LIME sira 2 -- num_segments")
     best_segments = int(b2['num_segments'])
-    print("\n  >> Sira 2 kazanani: num_segments=%d (faithfulness=%.4f)"
-          % (best_segments, b2['faithfulness_mean']))
+    print("  >> Sira 2: num_segments=%d (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_segments, b2['faithfulness_mean'], b2['latency_mean_ms']))
 
     # ---- Sira 3: kernel_width ----
     print("\n>>> SIRA 3: kernel_width (num_samples=%d, num_segments=%d sabit)"
@@ -841,10 +946,10 @@ def run_lime_ofat_sweep(model, eval_windows, cfg):
 
     df3 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('lime_stage3')])
-    b3 = pick_best(df3)
+    b3 = choose_stage_winner(df3, cfg, "LIME sira 3 -- kernel_width")
     best_kw = float(b3['kernel_width'])
-    print("\n  >> Sira 3 kazanani: kernel_width=%.4f (faithfulness=%.4f)"
-          % (best_kw, b3['faithfulness_mean']))
+    print("  >> Sira 3: kernel_width=%.4f (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_kw, b3['faithfulness_mean'], b3['latency_mean_ms']))
 
     df_all = pd.DataFrame(all_results)
     df_all.to_csv(cfg.LIME_SWEEP_CSV, index=False)
@@ -900,10 +1005,10 @@ def run_shap_ofat_sweep(model, eval_windows, background_pool, cfg):
 
     df1 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('shap_stage1')])
-    b1 = pick_best(df1)
+    b1 = choose_stage_winner(df1, cfg, "SHAP sira 1 -- background_size")
     best_bg = int(b1['background_size'])
-    print("\n  >> Sira 1 kazanani: background_size=%d (faithfulness=%.4f)"
-          % (best_bg, b1['faithfulness_mean']))
+    print("  >> Sira 1: background_size=%d (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_bg, b1['faithfulness_mean'], b1['latency_mean_ms']))
 
     # ---- Sira 2: nsamples ----
     print("\n>>> SIRA 2: nsamples (background_size=%d, method=%s sabit)"
@@ -919,10 +1024,10 @@ def run_shap_ofat_sweep(model, eval_windows, background_pool, cfg):
 
     df2 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('shap_stage2')])
-    b2 = pick_best(df2)
+    b2 = choose_stage_winner(df2, cfg, "SHAP sira 2 -- nsamples")
     best_ns = int(b2['nsamples'])
-    print("\n  >> Sira 2 kazanani: nsamples=%d (faithfulness=%.4f)"
-          % (best_ns, b2['faithfulness_mean']))
+    print("  >> Sira 2: nsamples=%d (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_ns, b2['faithfulness_mean'], b2['latency_mean_ms']))
 
     # ---- Sira 3: background_method ----
     print("\n>>> SIRA 3: background_method (background_size=%d, nsamples=%d sabit)"
@@ -937,10 +1042,10 @@ def run_shap_ofat_sweep(model, eval_windows, background_pool, cfg):
 
     df3 = pd.DataFrame([r for r in all_results
                         if r['config_name'].startswith('shap_stage3')])
-    b3 = pick_best(df3)
+    b3 = choose_stage_winner(df3, cfg, "SHAP sira 3 -- background_method")
     best_method = str(b3['bg_method'])
-    print("\n  >> Sira 3 kazanani: background_method=%s (faithfulness=%.4f)"
-          % (best_method, b3['faithfulness_mean']))
+    print("  >> Sira 3: background_method=%s (faithfulness=%.4f, gecikme %.1f ms)"
+          % (best_method, b3['faithfulness_mean'], b3['latency_mean_ms']))
 
     df_all = pd.DataFrame(all_results)
     df_all.to_csv(cfg.SHAP_SWEEP_CSV, index=False)
