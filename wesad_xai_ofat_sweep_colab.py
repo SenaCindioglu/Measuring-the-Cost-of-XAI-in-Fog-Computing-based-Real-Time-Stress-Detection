@@ -63,10 +63,18 @@ try:
 except ImportError:
     psutil = None   # bellek olcumu sessizce atlanir
 
-try:
-    import shap
-except ImportError:
-    raise ImportError("SHAP kurulu degil. Once `!pip install shap` calistirin.")
+def _require_shap():
+    """SHAP'i ancak gercekten gerektiginde ice aktar.
+
+    Modul seviyesinde import edilince, bu dosyadaki veri yukleme ve arka plan
+    olusturma fonksiyonlarini shap kurulu OLMAYAN bir makinede (ornegin
+    yerel deney makinesi) yeniden kullanmak imkansiz hale geliyordu.
+    """
+    try:
+        import shap
+    except ImportError:
+        raise ImportError("SHAP kurulu degil. Once `pip install shap` calistirin.")
+    return shap
 
 
 # ===============================================================
@@ -512,6 +520,7 @@ def build_background(pool_windows, size, method, seed=0):
 
 
 def make_shap_explainer(model, background_windows, device):
+    shap = _require_shap()
     background_tensor = torch.from_numpy(background_windows).float().to(device)
     explainer = shap.GradientExplainer(model, background_tensor)
     return explainer, 'GradientExplainer'

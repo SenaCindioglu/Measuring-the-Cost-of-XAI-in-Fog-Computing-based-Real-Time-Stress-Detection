@@ -1,0 +1,80 @@
+{
+ "created_utc": "2026-09-21T11:05:05+00:00",
+ "git_commit": "ce8b6bdecbf83e9c61c058f5cb1bb976db5aa909",
+ "python": "3.11.9",
+ "numpy": "2.2.6",
+ "model": {
+  "path": "wesad_best_model_f32-128_k9.pt",
+  "sha256": "43a33712f03958b8f507ce7a708ca83590cb3218ff317ea0b3d39de6dd8dbb9f"
+ },
+ "window": {
+  "target_rate_hz": 64,
+  "window_size": 640,
+  "hop_size": 320,
+  "num_channels": 14,
+  "channel_names": [
+   "chest_ACC_x",
+   "chest_ACC_y",
+   "chest_ACC_z",
+   "chest_ECG",
+   "chest_EMG",
+   "chest_EDA",
+   "chest_Temp",
+   "chest_Resp",
+   "wrist_ACC_x",
+   "wrist_ACC_y",
+   "wrist_ACC_z",
+   "wrist_BVP",
+   "wrist_EDA",
+   "wrist_TEMP"
+  ]
+ },
+ "lime": {
+  "num_samples": 500,
+  "num_segments": 5,
+  "kernel_width": 0.25
+ },
+ "shap": {
+  "background_size": 100,
+  "nsamples": 50,
+  "background_method": "kmeans"
+ },
+ "shap_background": {
+  "file": "shap_background_k100_kmeans.npz",
+  "shape": [
+   100,
+   14,
+   640
+  ],
+  "dtype": "float32",
+  "size_mb": 3.42,
+  "sha256": "d8e9d05866070d5e2cc2bd44d98679cb24de0d83b501f5d70d07ea893d86da97",
+  "subjects": [
+   "S2",
+   "S3",
+   "S4",
+   "S5"
+  ],
+  "pool_size": 2355,
+  "method": "kmeans",
+  "seed": 42
+ },
+ "eval_subjects": [
+  "S11",
+  "S14"
+ ],
+ "selection": {
+  "device": "cuda (Colab)",
+  "n_eval_windows": 40,
+  "lime": {
+   "latency_mean_ms": 55.5,
+   "faithfulness": 0.237
+  },
+  "shap": {
+   "latency_mean_ms": 50.5,
+   "faithfulness": 0.2287
+  },
+  "note": "Secim elle yapildi: kalite-gecikme tablosuna bakilarak. En iyi kaliteye gore LIME -%7 / 4.3x hizli, SHAP -%2.3 / 7.7x hizli."
+ },
+ "target_class": 1
+}
