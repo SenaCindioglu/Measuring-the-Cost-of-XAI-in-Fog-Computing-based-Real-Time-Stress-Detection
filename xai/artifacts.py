@@ -76,25 +76,46 @@ from config import config
 
 LIME_CONFIG = {
     'num_samples': 500,       # perturbasyon sayisi
-    'num_segments': 5,        # zaman dilimi sayisi (bolge = 5 x 14 kanal = 70)
-    'kernel_width': 0.25,     # tarama varsayilani
+    'num_segments': 20,       # zaman dilimi sayisi (bolge = 20 x 14 kanal = 280)
+    'kernel_width': 0.5,      # tarama varsayilaninin iki kati
 }
 
 SHAP_CONFIG = {
+    'background_size': 100,
+    'nsamples': 200,
+    'background_method': 'kmeans',
+}
+
+# FAZ D ICIN IKINCI (UCUZ) CALISMA NOKTASI.
+# Taramanin en carpici Pareto noktasi: SHAP'ta nsamples 200 -> 50 gecmek
+# faithfulness'tan yalnizca %1.4 goturuyor (0.2243 -> 0.2214) ama gecikmeyi
+# 8.6 kat dusuruyor (205 ms -> 46.5 ms). Secici XAI deneyi iki maliyet
+# noktasinda kosulacak; bu, ucuz olani.
+SHAP_CONFIG_CHEAP = {
     'background_size': 100,
     'nsamples': 50,
     'background_method': 'kmeans',
 }
 
-# Olculen degerler (GPU, 40 pencere, tek kosu). Yerel CPU olcumu ayrica
-# yapilacak; burada duruyor ki dosyanin hangi sayilarla secildigi kaybolmasin.
+# Olculen degerler (GPU, 40 pencere, tek kosu, NEDENSEL normalizasyon).
+# Yerel CPU olcumu ayrica yapilacak; burada duruyor ki dosyanin hangi
+# sayilarla secildigi kaybolmasin.
 SELECTION_EVIDENCE = {
     'device': 'cuda (Colab)',
+    'norm_mode': 'causal',
     'n_eval_windows': 40,
-    'lime': {'latency_mean_ms': 55.5, 'faithfulness': 0.2370},
-    'shap': {'latency_mean_ms': 50.5, 'faithfulness': 0.2287},
-    'note': ('Secim elle yapildi: kalite-gecikme tablosuna bakilarak. '
-             'En iyi kaliteye gore LIME -%7 / 4.3x hizli, SHAP -%2.3 / 7.7x hizli.'),
+    'sweep_date': '2026-09-21',
+    'lime': {'latency_mean_ms': 152.8, 'latency_p95_ms': 344.5,
+             'faithfulness': 0.2390, 'monotonicity': 0.5813, 'sensitivity': 0.0365},
+    'shap': {'latency_mean_ms': 199.3, 'latency_p95_ms': 240.5,
+             'faithfulness': 0.2302, 'monotonicity': 0.5625, 'sensitivity': 0.1184},
+    'shap_cheap': {'latency_mean_ms': 46.5, 'latency_p95_ms': 54.9,
+                   'faithfulness': 0.2214},
+    'note': ('Secim asama sonu tablolarina bakilarak ELLE yapildi. Esit '
+             'maliyette LIME daha sadik (0.2390 > 0.2302) ve 3.2 kat daha '
+             'kararli (sensitivity 0.036 < 0.118). Sizintili (subject) uzayda '
+             'olculen onceki kosuda faithfulness ve kararlilik DAHA IYI '
+             'gorunuyordu; nedensel uzay gercek dagitim kosulu.'),
 }
 
 # Arka plan havuzu: TEST deneklerinden AYRI olmak zorunda.
@@ -202,7 +223,21 @@ def build_shap_background(cfg=config, subjects=None, size=None, method=None,
         print("   %s ile %d merkeze indiriliyor..." % (method, size))
 
     background = build_background(pool, size, method, seed=seed)
-    return background.astype(np.float32), {'pool_size': int(len(pool)),
+
+    # KMeans, random_state sabitken AYNI kumelemeyi uretir ama bit duzeyinde
+    # ayni sayilari uretmez: cok cekirdekli toplama sirasi degistigi icin son
+    # basamaklar oynuyor. Olculdu: iki uretim arasindaki en buyuk fark
+    # 2.4e-07 ve 100 merkezin hepsi ayni sirada esliyor. Yuvarlamak da
+    # cozmuyor, cunku yuvarlama sinirina denk gelen degerler yine ayrisiyor.
+    #
+    # Bu yuzden SHA-256 su ise yarar: KAYDEDILMIS dosyanin sonradan
+    # degismedigini dogrulamak. "Yeniden uretince ayni ozet cikmali" iddiasi
+    # edilmiyor; yeniden uretim, sayisal olarak esdeger ama bit olarak farkli
+    # bir dosya verir. save_artifacts eski dosya varsa ikisini karsilastirip
+    # farkin buyuklugunu yazar.
+    background = background.astype(np.float32)
+
+    return background, {'pool_size': int(len(pool)),
                                            'subjects': subjects,
                                            'method': method, 'seed': seed,
                                            'norm_mode': sweep_cfg.NORM_MODE}
@@ -218,6 +253,24 @@ def save_artifacts(cfg=config, out_dir=None, verbose=True):
     background, prov = build_shap_background(cfg, verbose=verbose)
 
     bg_path = os.path.join(out_dir, BACKGROUND_FILENAME)
+
+    # Eskisi varsa uzerine yazmadan once ne kadar degistigini soyle: parametre
+    # ya da normalizasyon degistiyse fark buyuk olur, yalnizca yeniden uretim
+    # yapildiysa 1e-6 mertebesinde kalir (KMeans'in bit duzeyi oynamasi).
+    if os.path.exists(bg_path) and verbose:
+        try:
+            with np.load(bg_path, allow_pickle=False) as z:
+                old = z['background']
+            if old.shape == background.shape:
+                diff = float(np.abs(old - background).max())
+                verdict = ("sayisal olarak ayni (yalnizca yuvarlama)"
+                           if diff < 1e-5 else "GERCEKTEN FARKLI")
+                print("   onceki dosyayla en buyuk fark: %.2e -> %s" % (diff, verdict))
+            else:
+                print("   onceki dosya farkli sekilde: %s -> %s"
+                      % (old.shape, background.shape))
+        except Exception:
+            pass
     # Metadata dosyanin ICINE de yazilir: npz tek basina elden ele
     # gectiginde nereden geldigi kaybolmasin.
     np.savez_compressed(
@@ -248,6 +301,7 @@ def save_artifacts(cfg=config, out_dir=None, verbose=True):
         },
         'lime': dict(LIME_CONFIG),
         'shap': dict(SHAP_CONFIG),
+        'shap_cheap': dict(SHAP_CONFIG_CHEAP),
         'shap_background': {
             'file': BACKGROUND_FILENAME,
             'shape': list(background.shape),
@@ -332,6 +386,10 @@ def show(cfg=config, out_dir=None):
     print("  git           : %s" % (rec.get('git_commit') or '-')[:12])
     print("  LIME         : " + ", ".join("%s=%s" % kv for kv in rec['lime'].items()))
     print("  SHAP         : " + ", ".join("%s=%s" % kv for kv in rec['shap'].items()))
+    if rec.get('shap_cheap'):
+        print("  SHAP (ucuz)  : " + ", ".join("%s=%s" % kv
+                                              for kv in rec['shap_cheap'].items())
+              + "   <- Faz D'de ikinci maliyet noktasi")
     print("  arka plan    : %s %s, %.2f MB, %s, denekler %s (havuz %d)"
           % (bg['shape'], bg['dtype'], bg['size_mb'], bg['method'],
              bg['subjects'], bg['pool_size']))

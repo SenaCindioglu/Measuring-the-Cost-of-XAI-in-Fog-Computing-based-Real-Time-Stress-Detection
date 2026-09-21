@@ -1,6 +1,6 @@
 {
- "created_utc": "2026-09-21T11:36:08+00:00",
- "git_commit": "a5b35f6dda77fce8b95f9a4e7ebb4d4f547e5f1b",
+ "created_utc": "2026-09-21T12:16:02+00:00",
+ "git_commit": "d0a22f3b2711680d0bf626d2f4b17722bf37791e",
  "python": "3.11.9",
  "numpy": "2.2.6",
  "model": {
@@ -31,10 +31,15 @@
  },
  "lime": {
   "num_samples": 500,
-  "num_segments": 5,
-  "kernel_width": 0.25
+  "num_segments": 20,
+  "kernel_width": 0.5
  },
  "shap": {
+  "background_size": 100,
+  "nsamples": 200,
+  "background_method": "kmeans"
+ },
+ "shap_cheap": {
   "background_size": 100,
   "nsamples": 50,
   "background_method": "kmeans"
@@ -48,7 +53,7 @@
   ],
   "dtype": "float32",
   "size_mb": 3.42,
-  "sha256": "4ed404bea4beeefb0c4663009bbb9994e10493157ff43b1c56aacb94b4bf8932",
+  "sha256": "d1ab44088c4fca459926ee87a25340dc36861107dffc5248fcaa7836b136b449",
   "subjects": [
    "S2",
    "S3",
@@ -66,16 +71,29 @@
  ],
  "selection": {
   "device": "cuda (Colab)",
+  "norm_mode": "causal",
   "n_eval_windows": 40,
+  "sweep_date": "2026-09-21",
   "lime": {
-   "latency_mean_ms": 55.5,
-   "faithfulness": 0.237
+   "latency_mean_ms": 152.8,
+   "latency_p95_ms": 344.5,
+   "faithfulness": 0.239,
+   "monotonicity": 0.5813,
+   "sensitivity": 0.0365
   },
   "shap": {
-   "latency_mean_ms": 50.5,
-   "faithfulness": 0.2287
+   "latency_mean_ms": 199.3,
+   "latency_p95_ms": 240.5,
+   "faithfulness": 0.2302,
+   "monotonicity": 0.5625,
+   "sensitivity": 0.1184
   },
-  "note": "Secim elle yapildi: kalite-gecikme tablosuna bakilarak. En iyi kaliteye gore LIME -%7 / 4.3x hizli, SHAP -%2.3 / 7.7x hizli."
+  "shap_cheap": {
+   "latency_mean_ms": 46.5,
+   "latency_p95_ms": 54.9,
+   "faithfulness": 0.2214
+  },
+  "note": "Secim asama sonu tablolarina bakilarak ELLE yapildi. Esit maliyette LIME daha sadik (0.2390 > 0.2302) ve 3.2 kat daha kararli (sensitivity 0.036 < 0.118). Sizintili (subject) uzayda olculen onceki kosuda faithfulness ve kararlilik DAHA IYI gorunuyordu; nedensel uzay gercek dagitim kosulu."
  },
  "target_class": 1
 }
