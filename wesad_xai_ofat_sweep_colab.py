@@ -108,6 +108,21 @@ class Config:
     EVAL_SUBJECTS = ['S11', 'S14']                  # tutulmus denekler
     BACKGROUND_SUBJECTS = ['S2', 'S3', 'S4', 'S5']  # SHAP arka plani (AYRI)
 
+    # ---- Normalizasyon: XAI hangi girdi uzayinda olculecek? ----
+    # 'causal'  : sunucunun yaptigi nedensel z-score (yalnizca o ana kadar
+    #             gorulen veri). DAGITIMDA GERCEKTEN OLAN BU.
+    # 'subject' : tum kaydin istatistigi (sizintili, offline egitimdeki hal).
+    #
+    # Ikisinin urettigi pencereler OLCULDU: bagil L2 farki 0.77 (S11) ve
+    # 0.77 (S2), ilk pencereler atilsa bile duzelmiyor; standart sapma 1.00'e
+    # karsi 1.25. Yani iki uzay ayni degil. XAI'yi 'subject' uzayinda olcup
+    # sunucuya koymak, farkli bir dagilim uzerinde olculmus kalite ve gecikme
+    # raporlamak olurdu. Bu yuzden varsayilan 'causal'.
+    #
+    # 'subject' degeri eski sonuclarla karsilastirma icin duruyor. Sonuc
+    # dosyalarinin adina mod eklenir, boylece iki kosu birbirini ezmez.
+    NORM_MODE = 'causal'
+
     SEED = 42
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -219,8 +234,11 @@ def resolve_paths(cfg, verbose=True):
     if cfg.RESULTS_PATH is None:
         raise RuntimeError("Yazilabilir bir sonuc klasoru bulunamadi.")
 
-    cfg.LIME_SWEEP_CSV = os.path.join(cfg.RESULTS_PATH, 'xai_sweep_lime.csv')
-    cfg.SHAP_SWEEP_CSV = os.path.join(cfg.RESULTS_PATH, 'xai_sweep_shap.csv')
+    # Mod dosya adina girer: 'causal' ve 'subject' kosulari birbirini ezmesin
+    # ve hangi uzayda olculdugu dosya adindan anlasilsin.
+    suffix = '_' + getattr(cfg, 'NORM_MODE', 'subject')
+    cfg.LIME_SWEEP_CSV = os.path.join(cfg.RESULTS_PATH, 'xai_sweep_lime' + suffix + '.csv')
+    cfg.SHAP_SWEEP_CSV = os.path.join(cfg.RESULTS_PATH, 'xai_sweep_shap' + suffix + '.csv')
 
     if verbose:
         print("[OK] MODEL_PATH   = " + cfg.MODEL_PATH)
@@ -316,7 +334,80 @@ def normalize_subject(X):
     return X_norm.reshape(N, T, C).transpose(0, 2, 1), scaler
 
 
+class _RunningNormalizer:
+    """NEDENSEL (causal) online z-score -- Welford.
+
+    data/normalization.py'deki RunningNormalizer ile BIREBIR ayni hesap;
+    bu script kasitli olarak tek dosya (Colab'a tek basina yukleniyor)
+    oldugu icin kopyalandi. Formulu degistirirsen ikisini birlikte degistir.
+    """
+
+    def __init__(self, num_channels, eps=1e-8):
+        self.n = 0
+        self._mean = np.zeros(num_channels, dtype=np.float64)
+        self._m2 = np.zeros(num_channels, dtype=np.float64)
+        self.eps = eps
+
+    def update(self, chunk):
+        chunk = np.asarray(chunk, dtype=np.float64)
+        if chunk.ndim == 1:
+            chunk = chunk[None, :]
+        n_b = len(chunk)
+        if n_b == 0:
+            return
+        mean_b = chunk.mean(axis=0)
+        m2_b = ((chunk - mean_b) ** 2).sum(axis=0)
+        delta = mean_b - self._mean
+        n_tot = self.n + n_b
+        self._mean = self._mean + delta * (n_b / n_tot)
+        self._m2 = self._m2 + m2_b + (delta ** 2) * (self.n * n_b / n_tot)
+        self.n = n_tot
+
+    @property
+    def mean(self):
+        return self._mean
+
+    @property
+    def std(self):
+        if self.n < 2:
+            return np.ones_like(self._mean)
+        s = np.sqrt(self._m2 / self.n)
+        s[s < self.eps] = self.eps
+        return s
+
+
+def normalize_causal(X_win, hop_size):
+    """Pencereleri KRONOLOJIK sirada, yalnizca o ana kadar gorulen veriyle
+    normalize eder. Sunucunun (serving/server.py) yaptigi islemin aynisi.
+
+    NEDEN GEREKLI: subject-bazli normalizasyon tum kaydin istatistigini
+    kullanir, yani gelecege sizar ve gercek zamanli sistemde imkansizdir.
+    Iki yontemin urettigi pencereler OLCULDU: bagil L2 farki 0.77, yani
+    sinyal buyuklugunun %77'si kadar. Dolayisiyla XAI'yi sizintili uzayda
+    olcup sonra sunucuya koymak, farkli bir girdi dagilimi uzerinde
+    olculmus kalite ve gecikme sayilari raporlamak anlamina gelirdi.
+
+    X_win: (N, T, C) kronolojik pencereler. Donen: ayni sekil, normalize.
+    """
+    N, T, C = X_win.shape
+    runner = _RunningNormalizer(C)
+    out = np.empty_like(X_win, dtype=np.float64)
+    for i in range(N):
+        # Sunucudaki ile ayni: ilk pencerede tamami, sonra yalnizca yeni hop
+        runner.update(X_win[i] if i == 0 else X_win[i, -hop_size:])
+        out[i] = (X_win[i] - runner.mean) / runner.std
+    return out
+
+
 def prepare_subject_data(subject_id, data_path, cfg):
+    """Bir denegin pencerelerini hazirlar.
+
+    cfg.NORM_MODE:
+      'causal'  (varsayilan) -- sunucudaki nedensel z-score. XAI'nin
+                dagitimda gorecegi girdi uzayi budur.
+      'subject' -- tum kaydin istatistigiyle z-score. Sizintili; yalnizca
+                eski sonuclarla karsilastirma icin durur.
+    """
     X_raw, y_raw = load_wesad_subject(subject_id, data_path, cfg.TARGET_RATE)
     if X_raw is None:
         return None, None
@@ -327,8 +418,16 @@ def prepare_subject_data(subject_id, data_path, cfg):
     X_win, y_win = create_windows(X_raw, y_raw, cfg.WINDOW_SIZE, cfg.STRIDE)
     if len(X_win) == 0:
         return None, None
-    X_win = X_win.transpose(0, 2, 1)
-    X_win, _ = normalize_subject(X_win)
+
+    mode = getattr(cfg, 'NORM_MODE', 'subject')
+    if mode == 'causal':
+        X_win = normalize_causal(X_win, cfg.STRIDE)          # (N, T, C)
+        X_win = X_win.transpose(0, 2, 1)                     # -> (N, C, T)
+    elif mode == 'subject':
+        X_win = X_win.transpose(0, 2, 1)
+        X_win, _ = normalize_subject(X_win)
+    else:
+        raise ValueError("Bilinmeyen NORM_MODE: " + str(mode))
     return X_win.astype(np.float32), y_win
 
 
@@ -1105,7 +1204,9 @@ def print_comparison(df_lime, df_shap, lime_reco, shap_reco, cfg):
     ])
     print(comp.to_string(index=False))
 
-    comp_csv = os.path.join(cfg.RESULTS_PATH, 'xai_lime_vs_shap_recommended.csv')
+    comp_csv = os.path.join(
+        cfg.RESULTS_PATH,
+        'xai_lime_vs_shap_recommended_' + getattr(cfg, 'NORM_MODE', 'subject') + '.csv')
     comp.to_csv(comp_csv, index=False)
     print("\nKarsilastirma tablosu kaydedildi: " + comp_csv)
 
@@ -1163,12 +1264,22 @@ def run_final_validation(model, lime_reco, shap_reco, cfg,
 # MAIN
 # ===============================================================
 
-def main(run_final=False):
+def main(run_final=False, run_lime=True, run_shap=True):
+    """run_lime / run_shap ile yalnizca bir yontem kosulabilir.
+
+    Not: normalizasyon modu degistiginde PENCERELERIN KENDISI degisir, yani
+    LIME de etkilenir. Yalnizca SHAP'i kosmak, iki yontemi ayni uzayda
+    karsilastirma imkanini kaybettirir; o yuzden ikisini de kosmak tercih
+    edilmeli.
+    """
     print("=" * 70)
     print("WESAD - ASAMA 3: XAI (LIME + SHAP) OFAT HIPERPARAMETRE SWEEP")
     print("=" * 70)
     resolve_paths(config)
     print("Device: " + str(config.DEVICE))
+    print("Normalizasyon: " + config.NORM_MODE
+          + (" (sunucudakiyle ayni: nedensel)" if config.NORM_MODE == 'causal'
+             else " (SIZINTILI -- yalnizca eski sonucla karsilastirma icin)"))
     print("Eval subjectler: " + str(config.EVAL_SUBJECTS)
           + " (N_EVAL_WINDOWS=" + str(config.N_EVAL_WINDOWS) + ")")
     print("Background subjectler (SHAP): " + str(config.BACKGROUND_SUBJECTS))
@@ -1191,21 +1302,34 @@ def main(run_final=False):
     print("\nSweep icin secilen pencere sayisi: " + str(len(eval_windows))
           + " (toplam havuz: " + str(len(X_eval_all)) + ")")
 
-    X_bg_pool, _ = load_all_subject_data(config.BACKGROUND_SUBJECTS, config)
-    print("SHAP arka plan havuzu: " + str(len(X_bg_pool)) + " pencere")
+    X_bg_pool = None
+    if run_shap:
+        X_bg_pool, _ = load_all_subject_data(config.BACKGROUND_SUBJECTS, config)
+        print("SHAP arka plan havuzu: " + str(len(X_bg_pool)) + " pencere")
 
-    df_lime, lime_reco = run_lime_ofat_sweep(model, eval_windows, config)
-    df_shap, shap_reco = run_shap_ofat_sweep(model, eval_windows, X_bg_pool, config)
-    print_comparison(df_lime, df_shap, lime_reco, shap_reco, config)
+    df_lime = df_shap = None
+    lime_reco = shap_reco = None
+    if run_lime:
+        df_lime, lime_reco = run_lime_ofat_sweep(model, eval_windows, config)
+    if run_shap:
+        df_shap, shap_reco = run_shap_ofat_sweep(model, eval_windows, X_bg_pool, config)
+    if run_lime and run_shap:
+        print_comparison(df_lime, df_shap, lime_reco, shap_reco, config)
+    else:
+        print("\n[!] Tek yontem kosuldu; LIME-SHAP karsilastirma tablosu atlandi.")
+        print("    Iki yontemi karsilastirmak icin ikisinin de AYNI "
+              "normalizasyon modunda kosulmus olmasi gerekir.")
 
     print("\n" + "=" * 70)
-    print("SWEEP TAMAMLANDI.")
-    print("LIME onerilen: " + str(lime_reco))
-    print("SHAP onerilen: " + str(shap_reco))
+    print("SWEEP TAMAMLANDI.  (normalizasyon: " + config.NORM_MODE + ")")
+    if lime_reco:
+        print("LIME onerilen: " + str(lime_reco))
+    if shap_reco:
+        print("SHAP onerilen: " + str(shap_reco))
     print("Bu degerler Faz D'deki secici XAI mekanizmasina sabit girdi olur.")
     print("=" * 70)
 
-    if run_final:
+    if run_final and run_lime and run_shap:
         run_final_validation(model, lime_reco, shap_reco, config,
                              full_eval_windows=X_eval_all, background_pool=X_bg_pool)
     return df_lime, df_shap, lime_reco, shap_reco

@@ -102,6 +102,9 @@ BACKGROUND_SUBJECTS = ['S2', 'S3', 'S4', 'S5']
 EVAL_SUBJECTS = ['S11', 'S14']          # yalnizca kayit icin; burada kullanilmaz
 SEED = 42
 
+# Arka planin uretildigi girdi uzayi. 'causal' = sunucunun nedensel z-score'u.
+NORM_MODE = 'causal'
+
 CONFIG_FILENAME = 'xai_config.json'
 BACKGROUND_FILENAME = 'shap_background_k100_kmeans.npz'
 
@@ -143,12 +146,17 @@ class _SweepCfg:
 
     Degerler config.py'den alinir; ikisi ayrismasin diye elle yazilmaz.
     """
-    def __init__(self, cfg):
+    def __init__(self, cfg, norm_mode=None):
         self.TARGET_RATE = cfg.TARGET_RATE
         self.WINDOW_SIZE = cfg.WINDOW_SIZE
         self.STRIDE = cfg.HOP_SIZE
         self.VALID_LABELS = list(cfg.VALID_LABELS)
         self.BINARY = cfg.BINARY
+        # Arka plan, SUNUCUNUN gordugu girdi uzayinda olmak zorunda.
+        # Sunucu nedensel normalizasyon yapiyor; arka plani tum kaydin
+        # istatistigiyle uretmek, SHAP'in referansini farkli bir dagilima
+        # koymak demekti. Iki uzay arasindaki bagil L2 farki olculdu: 0.77.
+        self.NORM_MODE = norm_mode or NORM_MODE
 
 
 # ----------------------------------------------------------------------
@@ -178,6 +186,8 @@ def build_shap_background(cfg=config, subjects=None, size=None, method=None,
             + ". Bu sizintidir; SHAP'in referansi test deneginin verisini gormemeli.")
 
     sweep_cfg = _SweepCfg(cfg)
+    if verbose:
+        print("   normalizasyon: %s" % sweep_cfg.NORM_MODE)
     pool = []
     for subj in subjects:
         X, _ = prepare_subject_data(subj, cfg.DATA_PATH, sweep_cfg)
@@ -194,7 +204,8 @@ def build_shap_background(cfg=config, subjects=None, size=None, method=None,
     background = build_background(pool, size, method, seed=seed)
     return background.astype(np.float32), {'pool_size': int(len(pool)),
                                            'subjects': subjects,
-                                           'method': method, 'seed': seed}
+                                           'method': method, 'seed': seed,
+                                           'norm_mode': sweep_cfg.NORM_MODE}
 
 
 def save_artifacts(cfg=config, out_dir=None, verbose=True):
@@ -247,6 +258,7 @@ def save_artifacts(cfg=config, out_dir=None, verbose=True):
             'pool_size': prov['pool_size'],
             'method': prov['method'],
             'seed': prov['seed'],
+            'norm_mode': prov['norm_mode'],
         },
         'eval_subjects': list(EVAL_SUBJECTS),
         'selection': SELECTION_EVIDENCE,

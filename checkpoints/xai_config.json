@@ -1,6 +1,6 @@
 {
- "created_utc": "2026-09-21T11:05:05+00:00",
- "git_commit": "ce8b6bdecbf83e9c61c058f5cb1bb976db5aa909",
+ "created_utc": "2026-09-21T11:36:08+00:00",
+ "git_commit": "a5b35f6dda77fce8b95f9a4e7ebb4d4f547e5f1b",
  "python": "3.11.9",
  "numpy": "2.2.6",
  "model": {
@@ -48,7 +48,7 @@
   ],
   "dtype": "float32",
   "size_mb": 3.42,
-  "sha256": "d8e9d05866070d5e2cc2bd44d98679cb24de0d83b501f5d70d07ea893d86da97",
+  "sha256": "4ed404bea4beeefb0c4663009bbb9994e10493157ff43b1c56aacb94b4bf8932",
   "subjects": [
    "S2",
    "S3",
@@ -57,7 +57,8 @@
   ],
   "pool_size": 2355,
   "method": "kmeans",
-  "seed": 42
+  "seed": 42,
+  "norm_mode": "causal"
  },
  "eval_subjects": [
   "S11",
