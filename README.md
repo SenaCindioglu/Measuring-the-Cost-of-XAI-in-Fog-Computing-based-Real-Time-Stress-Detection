@@ -77,6 +77,35 @@ yoksa: `pip install psutil`
 
 ## Kullanım
 
+### Docker ile sunucuyu deploy et
+
+Sunucu, varsayılan olarak `running` normalizasyonu kullanır; bu modda WESAD
+ham veri klasörü gerekmez. Docker ve Docker Compose kurulu sunucuda proje kök
+klasöründen:
+
+```bash
+docker compose up -d --build
+docker compose logs -f stress-server
+```
+
+TCP sunucusu `0.0.0.0:9099` adresinde dinler. İstemciyi çalıştırırken sunucunun
+IP adresini kullan:
+
+```bash
+python compare_deployments.py --subject S11 --realtime \
+  --deployment fog=SERVER_IP:9099 --tag docker_test
+```
+
+Konteyneri durdurmak için:
+
+```bash
+docker compose down
+```
+
+`fixed` normalizasyon kullanılacaksa WESAD veri klasörünü sunucuya koyup
+`WESAD_DATA_PATH` ile konteynere mount etmen veya önceden üretilmiş norm stats
+dosyasını `checkpoints/` altında image'a dahil etmen gerekir.
+
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
 
