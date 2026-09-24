@@ -106,6 +106,24 @@ docker compose down
 `WESAD_DATA_PATH` ile konteynere mount etmen veya önceden üretilmiş norm stats
 dosyasını `checkpoints/` altında image'a dahil etmen gerekir.
 
+XAI ile Docker sunucusunu başlatmak için VM üzerinde:
+
+```bash
+WESAD_XAI_METHOD=lime_ucuz WESAD_XAI_THRESHOLD=1.0 \
+docker compose up -d --build
+```
+
+Ardından istemci makinesinde ayrı bir etiketle çalıştır:
+
+```bash
+python run_fog_experiment.py --server-host SERVER_IP --subject S11 \
+  --realtime --max-ticks 600 --live --tag xai_limeucuz
+```
+
+`--live` ve `--realtime` aynı seçenektir. XAI açıklama süresi sunucu cevabındaki
+`stages.xai` alanına yazılır; `threshold=1.0` her tahmin penceresinde ucuz LIME
+çalıştırır.
+
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
 

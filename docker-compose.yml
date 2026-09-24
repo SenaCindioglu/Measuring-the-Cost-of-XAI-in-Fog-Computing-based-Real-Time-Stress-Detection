@@ -21,3 +21,7 @@ services:
       - running
       - --threads
       - "1"
+      - --xai-method
+      - ${WESAD_XAI_METHOD:-none}
+      - --xai-threshold
+      - ${WESAD_XAI_THRESHOLD:-0}

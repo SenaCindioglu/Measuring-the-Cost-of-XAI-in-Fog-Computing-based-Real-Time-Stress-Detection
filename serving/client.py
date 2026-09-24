@@ -288,7 +288,8 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
     }
 
     # Sunucu ici asama dokumu
-    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference', 'postprocessing']
+    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference',
+                   'postprocessing', 'xai']
     stages = {}
     for st in stage_names:
         vals = [r['stages'][st] for r in live if r.get('stages') and st in r['stages']]

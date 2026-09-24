@@ -7,7 +7,6 @@ data/WESAD/
 results/*
 !results/.gitkeep
 training/
-xai/
 tools/
 benchmark_runs.py
 compare_deployments.py

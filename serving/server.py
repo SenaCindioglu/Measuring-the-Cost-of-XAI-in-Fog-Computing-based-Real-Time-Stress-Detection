@@ -185,6 +185,7 @@ async def worker(state):
     queuing delay tam olarak bu beklemeyi olcer.
     """
     cfg, model, queue = state['cfg'], state['model'], state['queue']
+    explainer = state['explainer']
 
     while True:
         sess, body, t_recv = await queue.get()
@@ -229,6 +230,11 @@ async def worker(state):
                     pred = int(probs.argmax())
                     conf = float(probs.max())
                     stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
+
+                    if explainer is not None and conf < state['xai_threshold']:
+                        t0 = time.perf_counter()
+                        explainer.explain(norm_window)
+                        stages['xai'] = (time.perf_counter() - t0) * 1000.0
 
                     predicted = True
                     sess.n_windows += 1
@@ -324,6 +330,18 @@ async def main_async(args):
 
     model, arch, meta = load_checkpoint(args.model, torch.device('cpu'), fallback_cfg=cfg)
 
+    explainer = None
+    if args.xai_method == 'lime_ucuz':
+        from xai.artifacts import load_artifacts
+        from xai.lime_ import LimeExplainer
+
+        record = load_artifacts(cfg, with_background=False)
+        lime_config = dict(record['lime'])
+        lime_config['num_samples'] = 250
+        explainer = LimeExplainer(
+            model, num_channels=record['window']['num_channels'],
+            target_class=record.get('target_class', 1), device='cpu', **lime_config)
+
     mean = std = None
     if args.norm_mode == 'fixed':
         tag = os.path.splitext(os.path.basename(args.model))[0]
@@ -337,6 +355,7 @@ async def main_async(args):
         sampler.start()
 
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
+             'explainer': explainer, 'xai_threshold': args.xai_threshold,
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
              'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler}
 
@@ -357,6 +376,7 @@ async def main_async(args):
         print(f"Bellek       : {hw['total_ram_mb']:.0f} MB")
     print(f"Pencere/hop  : {cfg.WINDOW_SIZE} / {cfg.HOP_SIZE} ornek @ {cfg.TARGET_RATE} Hz")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
+    print(f"XAI          : {args.xai_method} (threshold={args.xai_threshold})")
     print("=" * 66)
     if args.host in ('0.0.0.0', '::'):
         addrs = local_addresses()
@@ -390,6 +410,12 @@ def main():
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
+    parser.add_argument('--xai-method', choices=['none', 'lime_ucuz'],
+                        default=os.environ.get('WESAD_XAI_METHOD', 'none'),
+                        help="Aciklama yontemi; lime_ucuz 250 perturbasyon kullanir")
+    parser.add_argument('--xai-threshold', type=float,
+                        default=float(os.environ.get('WESAD_XAI_THRESHOLD', '0')),
+                        help="Guven bu degerin altindaysa XAI calisir; 1.0 her pencere")
     args = parser.parse_args()
 
     try:

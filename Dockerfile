@@ -16,6 +16,7 @@ COPY models ./models
 COPY profiling ./profiling
 COPY serving ./serving
 COPY streaming ./streaming
+COPY xai ./xai
 COPY checkpoints ./checkpoints
 COPY wesad_best_model_f32-128_k9.pt .
 
