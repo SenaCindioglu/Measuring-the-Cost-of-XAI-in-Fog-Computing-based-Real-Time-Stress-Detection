@@ -131,6 +131,10 @@ docker compose up -d --build
 
 Daha hızlı SHAP yapılandırması için `WESAD_XAI_METHOD=shap_ucuz` kullan.
 
+Tam LIME yapılandırması için `WESAD_XAI_METHOD=lime` kullan; bu, seçili
+artifaktan gelen 500 perturbasyon örneğini çalıştırır. `lime_ucuz` 250 örnek
+kullanır.
+
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
 

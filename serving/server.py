@@ -331,14 +331,15 @@ async def main_async(args):
     model, arch, meta = load_checkpoint(args.model, torch.device('cpu'), fallback_cfg=cfg)
 
     explainer = None
-    if args.xai_method in ('lime_ucuz', 'shap', 'shap_ucuz'):
+    if args.xai_method in ('lime', 'lime_ucuz', 'shap', 'shap_ucuz'):
         from xai.artifacts import load_artifacts
-        if args.xai_method == 'lime_ucuz':
+        if args.xai_method in ('lime', 'lime_ucuz'):
             from xai.lime_ import LimeExplainer
 
             record = load_artifacts(cfg, with_background=False)
             lime_config = dict(record['lime'])
-            lime_config['num_samples'] = 250
+            if args.xai_method == 'lime_ucuz':
+                lime_config['num_samples'] = 250
             explainer = LimeExplainer(
                 model, num_channels=record['window']['num_channels'],
                 target_class=record.get('target_class', 1), device='cpu', **lime_config)
@@ -417,9 +418,9 @@ def main():
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
-    parser.add_argument('--xai-method', choices=['none', 'lime_ucuz', 'shap', 'shap_ucuz'],
+    parser.add_argument('--xai-method', choices=['none', 'lime', 'lime_ucuz', 'shap', 'shap_ucuz'],
                         default=os.environ.get('WESAD_XAI_METHOD', 'none'),
-                        help="Aciklama yontemi; lime_ucuz, shap veya shap_ucuz")
+                        help="Aciklama yontemi; lime, lime_ucuz, shap veya shap_ucuz")
     parser.add_argument('--xai-threshold', type=float,
                         default=float(os.environ.get('WESAD_XAI_THRESHOLD', '0')),
                         help="Guven bu degerin altindaysa XAI calisir; 1.0 her pencere")
