@@ -250,7 +250,13 @@ async def handle_client(reader, writer, state):
     cfg, model = state['cfg'], state['model']
     peer = writer.get_extra_info('peername')
 
-    body = await P.read_frame(reader)
+    try:
+        body = await P.read_frame(reader)
+    except asyncio.IncompleteReadError:
+        # Health checks and port probes may connect without sending a frame.
+        writer.close()
+        await writer.wait_closed()
+        return
     if body is None or P.msg_type(body) != P.TYPE_HELLO:
         writer.close()
         return
