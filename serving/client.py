@@ -401,6 +401,16 @@ def print_summary(s, title=""):
         name = hw.get('device_model') or hw.get('processor') or hw.get('machine', '?')
         print(f"   sunucu        : {name} | {hw.get('cpu_count')} cekirdek, "
               f"{hw.get('torch_threads')} iplik")
+        # Sunucunun bildirdigi XAI kunyesi: hangi aciklayici, hangi esik.
+        # Dosya adina guvenmek yerine rapordan okunabilsin.
+        x = srv.get('xai') or {}
+        if x.get('method') and x['method'] != 'none':
+            cfgs = x.get('config') or {}
+            detail = ", ".join(f"{k}={v}" for k, v in cfgs.items() if k != 'method')
+            rule = ("her pencere" if x.get('threshold', 0) >= 1.0
+                    else f"guven < {x['threshold']:.2f}")
+            print(f"   sunucu XAI    : {x['method']} | {rule}"
+                  + (f" | {detail}" if detail else ""))
         if rs.get('process_cpu_percent'):
             c = rs['process_cpu_percent']
             print(f"   sunucu CPU    : ort %{c['mean']:.1f}  tepe %{c['max']:.1f} "

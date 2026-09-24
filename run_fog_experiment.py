@@ -176,6 +176,14 @@ def main():
     parser.add_argument('--live', action='store_true',
                         help="Her tahmini geldigi anda ekrana yaz (tek istemcide; "
                              "gosterim amacli, olcumu etkilemez)")
+    parser.add_argument('--xai-method',
+                        choices=('none', 'lime', 'lime_ucuz', 'shap', 'shap_ucuz'),
+                        default='none',
+                        help="Yalnizca YEREL sunucu icin; uzak sunucuda "
+                             "aciklayici orada --xai-method ile secilir")
+    parser.add_argument('--xai-threshold', type=float, default=1.0,
+                        help="Guven bu degerin ALTINDA kalirsa aciklama uretilir "
+                             "(1.0 = her pencere)")
     parser.add_argument('--clock-resync-s', type=float, default=60.0,
                         help="Saat farki kac saniyede bir yeniden olculsun "
                              "(0 = yalnizca baslangicta; uzun kosularda latency kayar)")
@@ -192,8 +200,19 @@ def main():
         cmd = [sys.executable, '-m', 'serving.server', '--host', host,
                '--port', str(args.port), '--model', args.model,
                '--norm-mode', args.norm_mode, '--threads', str(args.threads)]
+        # XAI ayarlari sunucu tarafinda. Aktarilmazsa yerel (ortak yerlesim)
+        # kosusunda aciklama hic uretilemez ve fog ile edge ancak
+        # aciklamasiz karsilastirilabilirdi.
+        if args.xai_method != 'none':
+            cmd += ['--xai-method', args.xai_method,
+                    '--xai-threshold', str(args.xai_threshold)]
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        if not wait_for_port(host, args.port):
+        # XAI acikken acilis uzuyor: xai/ paketi shap ve sklearn'i ice aktariyor,
+        # arka plan kumesi diskten okunuyor ve isinma cagrisi yapiliyor. 20 s
+        # bunun icin yetmiyordu ve sunucu aslinda acilirken "port acilmadi"
+        # hatasi aliniyordu.
+        if not wait_for_port(host, args.port,
+                             timeout=90.0 if args.xai_method != 'none' else 20.0):
             proc.kill()
             raise SystemExit("Sunucu baslatilamadi (port acilmadi)")
 

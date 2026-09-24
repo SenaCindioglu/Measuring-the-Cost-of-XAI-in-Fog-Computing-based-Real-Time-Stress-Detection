@@ -355,10 +355,26 @@ async def handle_client(reader, writer, state):
             if mtype == P.TYPE_BYE:
                 # Kapanmadan once kendi kaynak kullanimimizi gonder
                 try:
+                    # XAI kunyesi de gonderilir. Onceki hali yalnizca
+                    # donanim ve kaynak ozetini yolluyordu; hangi
+                    # aciklayicinin hangi esikle kosuldugu SADECE dosya
+                    # adinda kaliyordu (fog_xai_lime.json gibi). Dosya adi
+                    # degistigi anda bilgi kayboluyor ve sonuclar tekrar
+                    # uretilemez hale geliyor, o yuzden JSON'un icine yazilir.
+                    xai_info = {'method': state.get('xai_method', 'none'),
+                                'threshold': state.get('xai_threshold', 0.0),
+                                'warmup_ms': state.get('xai_warmup_ms')}
+                    explainer = state.get('explainer')
+                    if explainer is not None:
+                        try:
+                            xai_info['config'] = explainer.config()
+                        except Exception:
+                            pass
                     writer.write(P.pack_stats({
                         'hardware': state['hardware'],
                         'resources': resource_summary(state.get('sampler')),
                         'sessions_peak': state.get('sessions_peak', 1),
+                        'xai': xai_info,
                     }))
                     await writer.drain()
                 except Exception:
