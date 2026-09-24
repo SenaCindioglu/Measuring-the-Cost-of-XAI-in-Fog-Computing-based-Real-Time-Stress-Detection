@@ -1,0 +1,219 @@
+{
+ "config": {
+  "deployments": [
+   {
+    "name": "fog",
+    "host": "167.71.43.64",
+    "port": 9099,
+    "local": false
+   }
+  ],
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "repeat": 1,
+  "tick_ms": 500,
+  "realtime": false,
+  "norm_mode": "running",
+  "max_ticks": 180,
+  "warmup_windows": 5
+ },
+ "by_deployment": {
+  "fog": {
+   "host": "167.71.43.64:9099",
+   "local": false,
+   "n_runs": 1,
+   "metrics": {
+    "latency": {
+     "median": {
+      "median": 51.246396000000004,
+      "min": 51.246396000000004,
+      "max": 51.246396000000004,
+      "range_pct": 0.0,
+      "runs": [
+       51.246396000000004
+      ]
+     },
+     "p95": {
+      "median": 55.8547988,
+      "min": 55.8547988,
+      "max": 55.8547988,
+      "range_pct": 0.0,
+      "runs": [
+       55.8547988
+      ]
+     },
+     "jitter": {
+      "median": 2.122697636363635,
+      "min": 2.122697636363635,
+      "max": 2.122697636363635,
+      "range_pct": 0.0,
+      "runs": [
+       2.122697636363635
+      ]
+     }
+    },
+    "queuing": {
+     "median": {
+      "median": 0.035904000000000005,
+      "min": 0.035904000000000005,
+      "max": 0.035904000000000005,
+      "range_pct": 0.0,
+      "runs": [
+       0.035904000000000005
+      ]
+     },
+     "p95": {
+      "median": 0.04938364999999999,
+      "min": 0.04938364999999999,
+      "max": 0.04938364999999999,
+      "range_pct": 0.0,
+      "runs": [
+       0.04938364999999999
+      ]
+     },
+     "jitter": {
+      "median": 0.010858636363636364,
+      "min": 0.010858636363636364,
+      "max": 0.010858636363636364,
+      "range_pct": 0.0,
+      "runs": [
+       0.010858636363636364
+      ]
+     }
+    },
+    "execution": {
+     "median": {
+      "median": 4.9511905,
+      "min": 4.9511905,
+      "max": 4.9511905,
+      "range_pct": 0.0,
+      "runs": [
+       4.9511905
+      ]
+     },
+     "p95": {
+      "median": 9.238087849999994,
+      "min": 9.238087849999994,
+      "max": 9.238087849999994,
+      "range_pct": 0.0,
+      "runs": [
+       9.238087849999994
+      ]
+     },
+     "jitter": {
+      "median": 1.6218091818181823,
+      "min": 1.6218091818181823,
+      "max": 1.6218091818181823,
+      "range_pct": 0.0,
+      "runs": [
+       1.6218091818181823
+      ]
+     }
+    },
+    "response": {
+     "median": {
+      "median": 45.61395,
+      "min": 45.61395,
+      "max": 45.61395,
+      "range_pct": 0.0,
+      "runs": [
+       45.61395
+      ]
+     },
+     "p95": {
+      "median": 53.93917,
+      "min": 53.93917,
+      "max": 53.93917,
+      "range_pct": 0.0,
+      "runs": [
+       53.93917
+      ]
+     },
+     "jitter": {
+      "median": 2.841254545454544,
+      "min": 2.841254545454544,
+      "max": 2.841254545454544,
+      "range_pct": 0.0,
+      "runs": [
+       2.841254545454544
+      ]
+     }
+    }
+   },
+   "clock_synced_same_machine": false,
+   "bandwidth_kbps": {
+    "median": 2001.9207539973413,
+    "min": 2001.9207539973413,
+    "max": 2001.9207539973413,
+    "range_pct": 0.0,
+    "runs": [
+     2001.9207539973413
+    ]
+   },
+   "server_hardware": {
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "processor": "DO-Regular",
+    "python": "3.11.16",
+    "torch": "2.14.0+cu130",
+    "cpu_count": 1,
+    "torch_threads": 1,
+    "total_ram_mb": 1968.0,
+    "cpu_mhz_max": null
+   },
+   "server_cpu_percent": {
+    "median": 0.236243747157799,
+    "min": 0.236243747157799,
+    "max": 0.236243747157799,
+    "range_pct": 0.0,
+    "runs": [
+     0.236243747157799
+    ]
+   },
+   "server_rss_mb": {
+    "median": 512.01953125,
+    "min": 512.01953125,
+    "max": 512.01953125,
+    "range_pct": 0.0,
+    "runs": [
+     512.01953125
+    ]
+   },
+   "clock": {
+    "uncertainty_ms": {
+     "median": 50.75145,
+     "min": 50.75145,
+     "max": 50.75145,
+     "range_pct": 0.0,
+     "runs": [
+      50.75145
+     ]
+    },
+    "drift_ms": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "range_pct": 0.0,
+     "runs": [
+      0.0
+     ]
+    },
+    "drift_ppm": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "range_pct": 0.0,
+     "runs": [
+      0.0
+     ]
+    },
+    "n_samples": [
+     1
+    ]
+   },
+   "latency_cross_check_ms": 20.31342775
+  }
+ }
+}
