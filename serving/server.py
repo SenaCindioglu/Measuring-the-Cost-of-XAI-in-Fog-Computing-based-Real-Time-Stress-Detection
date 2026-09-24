@@ -158,6 +158,72 @@ def resource_summary(sampler):
     return out
 
 
+#: --xai-method ile secilebilen aciklayicilar. Iki maliyet noktasi kasitli:
+#: secici XAI'nin kazanci aciklama pahalilastikca buyuyor.
+XAI_METHODS = ('none', 'lime', 'lime_ucuz', 'shap', 'shap_ucuz')
+
+
+def build_explainer(method, model, device='cpu'):
+    """xai_config.json'daki dondurulmus yapilandirmadan aciklayici kurar.
+
+    Import BILEREK tembel: `xai/` paketi sunucu imajinda bulunmayabilir
+    (.dockerignore onu disarida birakiyor, cunku --xai-method none varsayilan
+    ve o durumda hic gerekmiyor). Tepede import edilseydi XAI kullanmayan
+    bir dagitimda sunucu hic acilmazdi.
+    """
+    if method in (None, 'none'):
+        return None
+    from xai.artifacts import load_artifacts
+    from xai import lime_ as lime_mod, shap_ as shap_mod
+
+    record = load_artifacts()
+    if method == 'lime':
+        return lime_mod.from_artifacts(model, record, device=device)
+    if method == 'lime_ucuz':
+        # CPU'da LIME'in maliyeti ornek sayisiyla dogrusal; dilim sayisi
+        # bedava (olculdu). Ucuz nokta bu yuzden num_samples'tan geciyor.
+        return lime_mod.from_artifacts(model, record, device=device, num_samples=250)
+    if method == 'shap':
+        return shap_mod.from_artifacts(model, record, device=device)
+    if method == 'shap_ucuz':
+        return shap_mod.from_artifacts(model, record, device=device, cheap=True)
+    raise ValueError("Bilinmeyen --xai-method: " + str(method))
+
+
+def warmup_explainer(explainer, cfg):
+    """Aciklayiciyi acilista bir kez calistirir ve ilk cagri suresini doner.
+
+    NEDEN GEREKLI: SHAP'in ILK cagrisi bu makinede 12.4 saniye olculdu,
+    sonraki cagrilar 0.85 saniye. Fark grafik kurulumu ve onbellek isinmasi.
+    Isitilmazsa bu 12 saniye ilk aciklamada worker'i bloklar; tek worker
+    oldugu icin butun kuyruk onun arkasinda birikir ve o istemcinin
+    queuing delay'i olcum boyunca anlamsizlasir.
+    """
+    if explainer is None:
+        return None
+    dummy = np.zeros((cfg.NUM_CHANNELS, cfg.WINDOW_SIZE), dtype=np.float32)
+    t0 = time.perf_counter()
+    explainer.explain(dummy)
+    return (time.perf_counter() - t0) * 1000.0
+
+
+def should_explain(confidence, threshold):
+    """Secici XAI karari: guven esigin ALTINDA ise acikla.
+
+    threshold = 0.0 -> hicbir zaman  (kontrol kosusu: XAI'siz taban)
+    threshold = 1.0 -> her pencere   (kontrol kosusu: en pahali durum)
+    arasi            -> yalnizca modelin emin olmadigi pencereler
+
+    1.0 ayrica ele alinir: softmax cikti tam 1.0 okuyabildigi icin
+    'conf < 1.0' karsilastirmasi nadiren de olsa atlardi.
+    """
+    if threshold <= 0.0:
+        return False
+    if threshold >= 1.0:
+        return True
+    return confidence < threshold
+
+
 class ClientSession:
     """Tek bir istemcinin sunucu tarafindaki durumu."""
 
@@ -176,6 +242,7 @@ class ClientSession:
         self.fixed_mean, self.fixed_std = fixed_mean, fixed_std
         self.n_windows = 0
         self.n_packets = 0
+        self.n_explained = 0
 
 
 async def worker(state):
@@ -185,6 +252,8 @@ async def worker(state):
     queuing delay tam olarak bu beklemeyi olcer.
     """
     cfg, model, queue = state['cfg'], state['model'], state['queue']
+    explainer = state.get('explainer')
+    xai_threshold = state.get('xai_threshold', 0.0)
 
     while True:
         sess, body, t_recv = await queue.get()
@@ -194,6 +263,7 @@ async def worker(state):
             ready = sess.buffer.push(chunks, sess.tick_s)
 
             predicted = False
+            explained = False
             pred = conf = None
             stages = None
 
@@ -230,6 +300,19 @@ async def worker(state):
                     conf = float(probs.max())
                     stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
 
+                    # --- Secici XAI ---
+                    # Aciklama, tahminle AYNI worker'da ve execution time'in
+                    # ICINDE uretilir. Ayri bir iplige atilsaydi maliyeti
+                    # gorunmez olurdu; deneyin butun amaci o maliyeti olcmek.
+                    if explainer is not None and should_explain(conf, xai_threshold):
+                        t0 = time.perf_counter()
+                        explainer.explain(
+                            np.ascontiguousarray(norm_window.transpose(1, 0),
+                                                 dtype=np.float32))
+                        stages['xai'] = (time.perf_counter() - t0) * 1000.0
+                        explained = True
+                        sess.n_explained += 1
+
                     predicted = True
                     sess.n_windows += 1
 
@@ -238,7 +321,7 @@ async def worker(state):
             sess.writer.write(P.pack_reply(msg_id, t_recv, t_start, t_end,
                                            predicted=predicted, pred=pred,
                                            confidence=conf, true_label=None,
-                                           stages=stages))
+                                           stages=stages, explained=explained))
             await sess.writer.drain()
         except (ConnectionResetError, BrokenPipeError):
             pass
@@ -295,8 +378,10 @@ async def handle_client(reader, writer, state):
             await state['queue'].put((sess, body, t_recv))
 
             if state['log_every'] and sess.n_packets % state['log_every'] == 0:
+                extra = (f", {sess.n_explained} aciklama"
+                         if state.get('explainer') is not None else "")
                 print(f"    {sess.client_id}: {sess.n_packets} paket, "
-                      f"{sess.n_windows} tahmin")
+                      f"{sess.n_windows} tahmin{extra}")
 
     except (asyncio.IncompleteReadError, ConnectionResetError):
         pass
@@ -324,6 +409,17 @@ async def main_async(args):
         cache = os.path.join(cfg.CHECKPOINT_DIR, f'norm_stats_{tag}.npz')
         mean, std = ensure_fixed_stats(cache, meta.get('train_subjects') or cfg.TRAIN_SUBJECTS, cfg)
 
+    # XAI: aciklayiciyi ISTEMCI BAGLANMADAN kur ve isit. Kaynak ornekleyici
+    # de bundan sonra baslatilir, yoksa isinmanin CPU/RAM tepesi kosunun
+    # kaynak ozetine karisirdi.
+    explainer = build_explainer(args.xai_method, model, device='cpu')
+    warmup_ms = None
+    if explainer is not None:
+        print(f"[i] XAI hazirlaniyor ({args.xai_method}), ilk cagri yavastir...")
+        warmup_ms = warmup_explainer(explainer, cfg)
+        print(f"[i] XAI hazir. Isinma cagrisi {warmup_ms:.0f} ms surdu "
+              f"(olcume DAHIL DEGIL).")
+
     hw = hardware_info()
     sampler = None
     if _HAS_PSUTIL:
@@ -332,7 +428,9 @@ async def main_async(args):
 
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
-             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler}
+             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler,
+             'explainer': explainer, 'xai_threshold': args.xai_threshold,
+             'xai_method': args.xai_method, 'xai_warmup_ms': warmup_ms}
 
     asyncio.create_task(worker(state))
 
@@ -350,6 +448,13 @@ async def main_async(args):
     if hw.get('total_ram_mb'):
         print(f"Bellek       : {hw['total_ram_mb']:.0f} MB")
     print(f"Pencere/hop  : {cfg.WINDOW_SIZE} / {cfg.HOP_SIZE} ornek @ {cfg.TARGET_RATE} Hz")
+    if explainer is not None:
+        thr = args.xai_threshold
+        rule = ("her pencere" if thr >= 1.0 else f"guven < {thr:.2f} olan pencereler")
+        print(f"XAI          : {args.xai_method} | {rule} | "
+              f"isinma {warmup_ms:.0f} ms")
+    else:
+        print(f"XAI          : kapali (--xai-method none)")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
     print("=" * 66)
     if args.host in ('0.0.0.0', '::'):
@@ -384,7 +489,22 @@ def main():
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
+    parser.add_argument('--xai-method', choices=XAI_METHODS, default='none',
+                        help="Aciklayici. Yapilandirma checkpoints/xai_config.json'dan "
+                             "okunur; 'none' ise xai/ paketi hic import edilmez.")
+    parser.add_argument('--xai-threshold', type=float, default=0.0,
+                        help="Guven esigi: bunun ALTINDAKI pencereler aciklanir. "
+                             "0.0 = hic (taban kosusu), 1.0 = her pencere (en pahali).")
     args = parser.parse_args()
+
+    # Sessizce yanlis kosu yapmaktansa basta durdur: bu iki kombinasyon
+    # neredeyse her zaman yazim hatasidir ve fark edilmezse "XAI'nin
+    # maliyeti sifir cikti" gibi bir sonuca yol acar.
+    if args.xai_method != 'none' and args.xai_threshold <= 0.0:
+        parser.error("--xai-method verildi ama --xai-threshold 0.0; hicbir pencere "
+                     "aciklanmaz. Her pencere icin 1.0, secici icin 0.60-0.90 kullan.")
+    if args.xai_method == 'none' and args.xai_threshold > 0.0:
+        parser.error("--xai-threshold verildi ama --xai-method none; aciklayici yok.")
 
     try:
         asyncio.run(main_async(args))

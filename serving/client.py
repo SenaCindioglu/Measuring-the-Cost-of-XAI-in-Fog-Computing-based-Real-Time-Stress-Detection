@@ -90,6 +90,43 @@ def _clock_report(samples, resync_every_s):
     }
 
 
+#: Ikili etiketlerin okunabilir karsiligi (1 = stres, WESAD etiketi 2).
+_LABEL_TEXT = {0: 'normal', 1: 'STRES '}
+
+
+def format_live_line(rec, n_pred, warmup_windows):
+    """--live icin tek pencerelik canli satir.
+
+    Amaci gosterim: sistem calisirken her pencerenin tahminini, guvenini ve
+    maliyetini akan bir kayit gibi yazar. OLCUME KATILMAZ -- zaman damgalari
+    bu satirdan once alinir, realtime modda basim suresi zaten tick
+    beklemesinin icinde erir.
+
+    Isinma pencereleri isaretlenir cunku ozet istatistiklere girmiyorlar;
+    ekranda gorunup raporda gorunmemeleri kafa karistirici olurdu.
+    """
+    pred = rec.get('pred_label')
+    true = rec.get('true_label', -1)
+    conf = rec.get('confidence') or 0.0
+
+    if true < 0:
+        mark = ' -'          # gecersiz etiketli pencere: dogruluk sorulamaz
+    elif true == pred:
+        mark = ' +'
+    else:
+        mark = ' X'
+
+    stages = rec.get('stages') or {}
+    xai_ms = stages.get('xai')
+    xai_txt = f"  aciklama {xai_ms:6.0f} ms" if xai_ms is not None else ""
+    warm = "  [isinma]" if n_pred <= warmup_windows else ""
+
+    return (f"  {time.strftime('%H:%M:%S')}  pencere {n_pred:3d}  "
+            f"{_LABEL_TEXT.get(pred, '?')}  guven {conf:.2f} {mark}  "
+            f"yanit {rec['response_ms']:6.1f} ms  "
+            f"hesap {rec['execution_ms']:6.1f} ms{xai_txt}{warm}")
+
+
 async def run_client(args, cfg, streams, raw_labels, client_id):
     per_tick = P.samples_per_tick(NATIVE_STREAMS, args.tick_ms)
     tick_s = args.tick_ms / 1000.0
@@ -129,6 +166,7 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     t_wall0 = time.perf_counter()
     PROGRESS_EVERY_S = 10.0
     t_next_progress = t_wall0 + PROGRESS_EVERY_S
+    n_pred = 0                     # --live satirlarini numaralandirmak icin
     t_next_resync = (t_wall0 + resync_every_s) if resync_every_s > 0 else float('inf')
 
     for msg_id in range(n_ticks):
@@ -180,6 +218,12 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
             rec['pred_label'] = rep['pred']
             rec['confidence'] = rep['confidence']
             rec['stages'] = rep.get('stages')
+            rec['explained'] = bool(rep.get('explained', False))
+
+            n_pred += 1
+            if getattr(args, 'live', False):
+                print(format_live_line(rec, n_pred,
+                                       getattr(args, 'warmup_windows', 0)), flush=True)
 
         records.append(rec)
 
@@ -288,7 +332,8 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
     }
 
     # Sunucu ici asama dokumu
-    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference', 'postprocessing']
+    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference',
+                   'postprocessing', 'xai']
     stages = {}
     for st in stage_names:
         vals = [r['stages'][st] for r in live if r.get('stages') and st in r['stages']]
@@ -296,6 +341,23 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
             stages[st] = stat(vals)
     if stages:
         out['server_stages'] = stages
+
+    # Secici XAI: tetiklenme orani. Bu, deneyin ana ciktilarindan biri --
+    # "aciklama basina maliyet" ile "pencere basina ortalama maliyet"
+    # arasindaki farki bu oran belirliyor.
+    n_expl = sum(1 for r in live if r.get('explained'))
+    if n_expl or any('explained' in r for r in live):
+        xai_vals = [r['stages']['xai'] for r in live
+                    if r.get('stages') and 'xai' in r['stages']]
+        out['xai'] = {
+            'n_explained': n_expl,
+            'n_windows': len(live),
+            'explain_rate': n_expl / len(live) if live else 0.0,
+            # Aciklama uretilmeyen pencerelerde maliyet sifir sayilir; bu,
+            # secici XAI'nin pencere BASINA gercek yukunu verir.
+            'mean_ms_per_window': (sum(xai_vals) / len(live)) if live and xai_vals else 0.0,
+            'mean_ms_per_explanation': (sum(xai_vals) / len(xai_vals)) if xai_vals else None,
+        }
 
     # Siniflandirma (etiketi gecerli pencereler)
     pairs = [(r['true_label'], r['pred_label']) for r in live
@@ -389,6 +451,9 @@ def main():
     parser.add_argument('--realtime', action='store_true',
                         help="Tick'ler arasinda gercek zaman bekle (sensor hizinda yukle)")
     parser.add_argument('--max-ticks', type=int, default=0, help="Test icin tick sayisini sinirla")
+    parser.add_argument('--live', action='store_true',
+                        help="Her tahmini geldigi anda ekrana yaz (gosterim amacli; "
+                             "olculen metrikleri etkilemez)")
     parser.add_argument('--clock-resync-s', type=float, default=CLOCK_RESYNC_S,
                         help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
     parser.add_argument('--tag', default='client')

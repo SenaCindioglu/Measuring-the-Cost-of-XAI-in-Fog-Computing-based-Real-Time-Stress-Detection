@@ -3,5 +3,12 @@ torch>=2.0
 numpy>=1.24
 psutil>=5.9
 
-# Yalnizca yeniden egitim icin (training/train_final_model.py)
+# XAI icin gerekli.
+#   scikit-learn : LIME'in agirlikli Ridge regresyonu ve SHAP arka planinin
+#                  KMeans ozetlemesi. (Ayrica yeniden egitimde kullaniliyor:
+#                  training/train_final_model.py)
+#   shap         : SHAP GradientExplainer.
+# Sunucu --xai-method none ile kosuluyorsa shap gerekmez; xai/ paketi o
+# durumda hic import edilmiyor.
 scikit-learn>=1.3
+shap>=0.44

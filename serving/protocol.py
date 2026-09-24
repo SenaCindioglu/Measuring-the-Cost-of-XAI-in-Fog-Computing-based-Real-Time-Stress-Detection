@@ -215,7 +215,14 @@ def unpack_data(body, streams_spec, per_tick):
 
 def pack_reply(msg_id, t_recv_ns, t_start_ns, t_end_ns,
                predicted=False, pred=None, confidence=None,
-               true_label=None, stages=None) -> bytes:
+               true_label=None, stages=None, explained=False) -> bytes:
+    """`explained`: bu pencere icin XAI aciklamasi uretildi mi.
+
+    Secici XAI deneyinde tetiklenme oraninin istemci tarafinda sayilabilmesi
+    gerekiyor; sureyi `stages['xai']` zaten tasiyor ama aciklamanin hic
+    uretilmedigi pencereyle sifir surede uretildigi pencere aksi halde
+    birbirinden ayirt edilemezdi.
+    """
     payload = {
         'msg_id': msg_id,
         't_recv': t_recv_ns,
@@ -225,7 +232,8 @@ def pack_reply(msg_id, t_recv_ns, t_start_ns, t_end_ns,
     }
     if predicted:
         payload.update({'pred': pred, 'confidence': confidence,
-                        'true_label': true_label, 'stages': stages})
+                        'true_label': true_label, 'stages': stages,
+                        'explained': bool(explained)})
     return frame(bytes([TYPE_REPLY]) + json.dumps(payload).encode('utf-8'))
 
 

@@ -173,6 +173,9 @@ def main():
     parser.add_argument('--realtime', action='store_true',
                         help="Sensor gercek hizinda gonder (kuyruk gecikmesi ancak boyle anlamli)")
     parser.add_argument('--max-ticks', type=int, default=0)
+    parser.add_argument('--live', action='store_true',
+                        help="Her tahmini geldigi anda ekrana yaz (tek istemcide; "
+                             "gosterim amacli, olcumu etkilemez)")
     parser.add_argument('--clock-resync-s', type=float, default=60.0,
                         help="Saat farki kac saniyede bir yeniden olculsun "
                              "(0 = yalnizca baslangicta; uzun kosularda latency kayar)")
@@ -221,7 +224,12 @@ def main():
         ca_list = [_ClientArgs(host=host, port=args.port, subject=s,
                                tick_ms=args.tick_ms, norm_mode=args.norm_mode,
                                realtime=args.realtime, max_ticks=args.max_ticks,
-                               clock_resync_s=args.clock_resync_s)
+                               clock_resync_s=args.clock_resync_s,
+                               warmup_windows=args.warmup_windows,
+                               # --live yalnizca TEK istemcide anlamli: birden
+                               # fazla istemci ayni anda yazarsa satirlar
+                               # birbirine karisir ve okunmaz hale gelir.
+                               live=args.live and len(subjects) == 1)
                    for s in subjects]
 
         t0 = time.perf_counter()
