@@ -121,8 +121,15 @@ python run_fog_experiment.py --server-host SERVER_IP --subject S11 \
 ```
 
 `--live` ve `--realtime` aynı seçenektir. XAI açıklama süresi sunucu cevabındaki
-`stages.xai` alanına yazılır; `threshold=1.0` her tahmin penceresinde ucuz LIME
-çalıştırır.
+`stages.xai` alanına yazılır; `threshold=1.0` her tahmin penceresinde açıklama
+çalıştırır. SHAP karşılaştırması için VM'yi şu şekilde başlat:
+
+```bash
+WESAD_XAI_METHOD=shap WESAD_XAI_THRESHOLD=1.0 \
+docker compose up -d --build
+```
+
+Daha hızlı SHAP yapılandırması için `WESAD_XAI_METHOD=shap_ucuz` kullan.
 
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
