@@ -234,16 +234,69 @@ atlanıyor.
    gecikmesi 210-300 ms, medyan 247 ms, p95 291 ms, 500 ms klinik eşiğine
    karşı. Bizim çerçeveye çok yakın bir raporlama biçimi.
 
-### ⚠️ Referans makalenin kendisi bulunamadı
+### ✅ Referans makale elde edildi (24 Eylül 2026)
 
-Tarama, Erzurumluoğlu ve ark. ICACT 2025 makalesinin **erişilebilir bir
-kaydını bulamadı**. Tanımlanan iş (DREAMER, zaman temelli istatistiksel
-öznitelikler, 104 öznitelikle %84.21 ve 24 öznitelikle %79.70, fog/edge/cloud
-karşılaştırması) anlatımla uyuşuyor ama birincil kaynak açılamadı.
+Birincil kaynak okundu, künye ve sayılar doğrulandı. Daha önceki
+"bulunamadı" notu geçersiz.
 
-**Yapılacak:** makalenin PDF'i hocadan istenecek. Tüm karşılaştırma tablomuz
-bu makaleye dayanıyor; sayılarını ve künyesini birincil kaynaktan
-doğrulamadan makaleye yazmak riskli.
+**Künye.** Ömür Fatmanur Erzurumluoğlu, Kadir Özlem, Aslı Tuncay Atalay,
+Özgür Atalay, Gökhan İnce. *Fog Computing-based Real-Time Emotion
+Recognition using Physiological Signals.* The 27th International Conference
+on Advanced Communications Technology (ICACT 2025), s. 442–450.
+ISBN 979-11-88428-13-7. İstanbul Teknik Üniversitesi.
+
+**Yöntem (bizimkinden farkları).**
+
+| | Onlar | Biz |
+|---|---|---|
+| Veri | DREAMER (EEG 14 kanal + ECG 2) | WESAD (göğüs 8 + bilek 6) |
+| Görev | 4 sınıf duygu | ikili stres |
+| Model | Random Forest | 1D-CNN (49.890 parametre) |
+| Girdi | 576 öznitelikten seçilmiş **24 öznitelik** | **ham sinyal**, öznitelik çıkarımı yok |
+| Pencere | 3 s, 1 s kayma | 10 s, 5 s kayma |
+| İstek hızı | saniyede 32 (31 veri akışı + 1 tahmin) | saniyede 2 tick, 5 s'de bir tahmin |
+| Doğruluk | %79.70 (24 öznitelik), %84.21 (104) | — farklı görev, kıyaslanamaz |
+
+**Ölçülen yedi metrik ve donanım.** Cloud: DigitalOcean VPS (Frankfurt).
+Broker ve Worker: ikisi de Raspberry Pi 4 Model B (Cortex-A72 @1.8 GHz,
+8 GB). Client: Asus ROG Strix G15 (Ryzen 7 4800H, 16 GB, Win 11). Ağ:
+Wi-Fi 802.11ac, 100/5 Mbps. Ölçüm: 1. katılımcının 199 s'lik "amusement"
+kaydı, 197 tahmin isteği.
+
+| Metrik | Edge | Worker (Fog) | Broker (Fog) | Cloud |
+|---|---|---|---|---|
+| Latency | **1.6 ms** | 4.7 ms | 4.8 ms | 32.2 ms |
+| Queuing delay | 13.7 ms (en kötü) | 0.6 ms | 0.5 ms | 0.8 ms |
+| Execution time | 5.7 ms | 34.7 ms | 35.3 ms | 8.9 ms |
+| **Response time** | **22.5 ms** | 43.3 ms | 43.9 ms | 73.3 ms |
+| Jitter | 0.5 ms | 17.4 ms | 16.8 ms | 36.6 ms |
+| Bandwidth | **8.5 kbps** | 373.9 kbps | 392.9 kbps | 384.2 kbps |
+| CPU | %0.4 | %6.7 | %6.7 | %6.2 |
+| Memory | %41.9 (en kötü) | %7.2 | %7.2 | %12.2 |
+
+**Kapasite iddiası:** 43 ms'lik döngü ve saniyede bir tahminle tek worker
+**~20 eşzamanlı kullanıcı** taşıyor (s. 449). A4 (çok istemcili yük)
+doğrudan bu sayıyla karşılaştırılacak.
+
+**Dikkat: makale "fog üstün" diyor ama tablosu edge'i gösteriyor.** Edge
+latency, response time, jitter ve bant genişliğinde açık ara önde
+(22.5 ms'ye karşı 43.3 ms). Yazarlar fog'u şu gerekçelerle seçiyor
+(s. 448, VI-B4): çok kullanıcılı eşzamanlı kullanım, giyilebilir cihazın
+pil ömrü ve merkezî veri analizi gereksinimi — **ölçülen zaman metrikleri
+yüzünden değil**. Bu ayrım bizim makalemizde de tekrarlanmalı, çünkü bizim
+`05_yerlesim` sonucumuz da benzer: ortak yerleşim response 7.44 ms, fog
+9.97 ms.
+
+**Tek gerçek karşılaştırma noktamız bant genişliği.** Onlar 3 s pencereden
+24 öznitelik çıkarıp gönderiyor, worker'da 373.9 kbps; biz 10 s pencerenin
+ham sinyalini gönderiyoruz, 187 kbps. Öznitelik göndermek ham sinyalden
+**daha pahalı** çıkıyor, çünkü onların istemcisi saniyede 32 istek atıyor.
+Zaman metrikleri donanım farkı (Pi 4 ↔ masaüstü) yüzünden doğrudan
+kıyaslanamaz; bu makalede açıkça yazılmalı.
+
+**Broker'ın gereksizliği onların kendi sayılarıyla doğrulanıyor:** worker
+43.3 ms, broker 43.9 ms. Tek worker varken broker yalnızca bir sıçrama
+ekliyor. Bizim mimaride broker olmaması bu yüzden eksiklik değil.
 
 ---
 

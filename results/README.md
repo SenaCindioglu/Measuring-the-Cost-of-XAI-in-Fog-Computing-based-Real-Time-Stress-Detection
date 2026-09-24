@@ -122,6 +122,88 @@ Kayıtlı hali: `checkpoints/xai_config.json`.
 
 ---
 
+## 07_edge_xai — ortak yerleşimde XAI, `04_fog` ile birebir eşleşen koşular
+
+Aynı beş durum, aynı denek (S11), aynı süre (600 tick), aynı ölçüm yöntemi.
+Değişen tek şey sunucunun yeri: burada istemciyle **aynı makinede**.
+`04_fog/` ile yan yana okunmak üzere üretildi.
+
+| Dosya | Açıklayıcı | xai | execution | response |
+|---|---|---|---|---|
+| `edge_xai_none.json` | yok | — | 5.8 ms | **7.3 ms** |
+| `edge_xai_shapucuz.json` | SHAP, nsamples 50 | 417 ms | 460.4 ms | 462.0 ms |
+| `edge_xai_limeucuz.json` | LIME, 250 örnek | 390 ms | 351.5 ms | 352.8 ms |
+| `edge_xai_lime.json` | LIME, 500 örnek | 831 ms | 688.5 ms | 690.0 ms |
+| `edge_xai_shap.json` | SHAP, nsamples 200 | 1224 ms | 1152.4 ms | 1154.5 ms |
+
+Loopback olduğu için `response ≈ execution`; aradaki fark `04_fog/`'da gerçek
+ağ maliyetidir.
+
+### ⚠️ Bu tablo `04_fog/` ile doğrudan kıyaslanamaz
+
+Sıralama yönteme göre değişiyor: LIME'da edge hızlı (390'a karşı 590 ms),
+SHAP'ın ucuz noktasında fog hızlı (395'e karşı 417 ms), tabanda ise fog
+hızlı (3.5'e karşı 5.8 ms). Donanım farkı böyle davranmaz.
+
+Sebep **yazılım yığını farkı**: edge'de PyTorch 2.8.0 / Python 3.11, fog'da
+2.14.0 / Python 3.14. LIME toplu ileri geçiş, SHAP gradyan hesabı yapıyor;
+iki farklı kod yolu iki sürümden farklı etkileniyor. İkisi de her koşunun
+`server_hardware` alanında kayıtlı.
+
+**Makalede ya bu cümle yazılır, ya da fog düğümü Docker'la (python:3.11)
+yeniden koşulup yığın eşitlenir.** Olduğu gibi "fog daha yavaş" diye
+sunulamaz.
+
+---
+
+## 08_kalibrasyon — güven kalibrasyonu (Faz D1)
+
+Seçici XAI'nin ön koşulu: `confidence` gerçek doğruluk olasılığını temsil
+ediyor mu? Sunucunun gördüğü girdi uzayında ölçüldü (native yeniden
+örnekleme + nedensel z-score), yani sayı dağıtıma taşınıyor.
+
+| Dosya | Ne | Sonuç |
+|---|---|---|
+| `calibration_d1.json` | S11 ve S14, reliability kutuları, ECE/MCE/Brier, çapraz denek sıcaklık ölçekleme, aday eşik tablosu | aşağıda |
+
+**İki denek taban tabana zıt:**
+
+| | S11 | S14 |
+|---|---|---|
+| doğruluk | 0.9520 | 0.6902 |
+| ortalama güven | 0.9093 | 0.9085 |
+| fazla özgüven | −0.043 | **+0.218** |
+| ECE | **0.0469** (iyi) | **0.2265** (bozuk) |
+
+Model ikisine de aynı güvenle yaklaşıyor ama birinde %95, diğerinde %69
+haklı. S14'te **kendinden emin biçimde yanılıyor**.
+
+**Sıcaklık ölçekleme çalışmadı.** Çapraz denek, her iki yönde de kötüleştirdi
+(S14→S11: ECE 0.047→0.256; S11→S14: 0.227→0.276). Bozukluk zıt yönlerde
+olduğu için tek parametre ikisini birden düzeltemiyor. Bu bir hata değil,
+raporlanacak bir bulgu.
+
+**Aday eşikler (düzeltmesiz):**
+
+| eşik | S11 açıklanan | S11 hata yakalama | S14 açıklanan | S14 hata yakalama |
+|---|---|---|---|---|
+| 0.70 | %10.4 | 0.621 | %4.4 | 0.060 |
+| **0.80** | **%14.4** | **0.897** | %11.8 | 0.120 |
+| 0.90 | %21.4 | 1.000 | %29.3 | 0.288 |
+
+**Makaleye giren ayrım:** maliyet tasarrufu her iki denekte gerçekleşiyor
+(eşik 0.80'de açıklama oranı %12–14, yani her pencereyi açıklamaya göre
+~%86 daha az hesap). Fayda ise kalibrasyona bağlı: iyi kalibre denekte
+hataların %90'ı yakalanıyor, kötü kalibre denekte %12'si. İki iddia ayrı
+yazılmalı.
+
+**Sınırlılık:** iki tutulmuş denek az; "denek bağımlı" sonucu n=2 üzerine
+kurulu.
+
+Üreten: `python -m tools.calibration --tag d1`
+
+---
+
 ## eski_ve_hatali — makaleye girmez
 
 Ayrıntılı gerekçeler: [eski_ve_hatali/README.md](eski_ve_hatali/README.md).

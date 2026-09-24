@@ -1,0 +1,1404 @@
+%=======================================================================
+%  Gercek Zamanli Fizyolojik Stres Tespitinde Aciklanabilirligin
+%  Hesaplama Maliyeti -- ic teknik rapor (IEEE konferans bicimi)
+%
+%  Derleme:  pdflatex main  ->  pdflatex main   (iki kez)
+%=======================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[turkish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{url}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{arrows.meta,positioning,fit}
+\usepackage{xspace}
+\usepackage[hidelinks]{hyperref}
+
+\pgfkeys{/pgf/number format/.cd,use comma,1000 sep={}}
+
+% Turkce babel '=', ':' ve '!' karakterlerini etkin hale getirir; matematik
+% kipinde ve tablo kurulumunda bu sorun cikarir. Kisayollar kapatilir,
+% tireleme ve "Sekil / TABLO / Kaynaklar" adlandirmasi korunur.
+\newcommand{\kapatKisayol}{\shorthandoff{=:!}}
+
+\newcommand{\ms}{\,ms\xspace}
+
+\begin{document}
+\kapatKisayol
+
+\title{Gerçek Zamanlı Fizyolojik Stres Tespitinde\\
+Açıklanabilirliğin Hesaplama Maliyeti:\\
+Uç ve Sis Yerleşiminde Uçtan Uca Ölçüm}
+
+\author{%
+\IEEEauthorblockN{Sena Cindioğlu}
+\IEEEauthorblockA{Bilgisayar Mühendisliği Bölümü\\
+Yıldız Teknik Üniversitesi\\
+İstanbul, Türkiye}
+\and
+\IEEEauthorblockN{Meryem Eldemery}
+\IEEEauthorblockA{Bilgisayar Mühendisliği Bölümü\\
+Yıldız Teknik Üniversitesi\\
+İstanbul, Türkiye}
+\and
+\IEEEauthorblockN{Hafiza İrem Türkmen Çilingir}
+\IEEEauthorblockA{Bilgisayar Mühendisliği Bölümü\\
+Yıldız Teknik Üniversitesi\\
+İstanbul, Türkiye}
+}
+
+\maketitle
+
+\begin{abstract}
+Fizyolojik sinyallerden stres tespiti literatüründe sınıflandırma başarımı
+doyuma yaklaşmış, açıklanabilir yapay zekâ (XAI) yöntemleri de yaygınlaşmıştır.
+Buna karşılık açıklama üretmenin \emph{hesaplama maliyeti} neredeyse hiç
+ölçülmemektedir: yaygın XAI değerlendirme çerçeveleri çalışma süresini kapsam
+dışı bırakmakta, WESAD üzerinde XAI uygulayan çalışmalar ise pencere başına
+açıklama gecikmesi bildirmemektedir. Bu çalışma, bitirme projesinde üretilmiş
+ve dondurulmuş bir stres sınıflandırıcısını gerçek zamanlı bir yeniden oynatma
+(replay) sistemine yerleştirerek bu boşluğu doldurur. Sistem, sensör istemcisi
+ile çıkarım sunucusunu gerçek bir TCP bağlantısıyla ayırır; gecikme, kuyruk
+gecikmesi, çalışma süresi, yanıt süresi, seğirme, bant genişliği ve kaynak
+kullanımı olmak üzere yedi metriği yüksek çözünürlüklü saatlerle, periyodik
+saat yeniden senkronizasyonu altında ölçer. Bölge tabanlı LIME ve SHAP
+GradientExplainer açıklayıcıları sunucunun içine, tahminle aynı iş parçacığına
+yerleştirilmiş; hiperparametreleri sadakat, monotonluk, duyarlılık ve
+karmaşıklık ölçütleriyle birlikte taranmıştır. Ayrı bir fiziksel makinede,
+Wi-Fi üzerinden yapılan uçtan uca ölçümlerde açıklayıcı kapalıyken yanıt süresi
+medyanı 10{,}6\ms iken, en pahalı yapılandırmada 1456{,}2\ms'ye, yani
+\textbf{137 katına} çıkmaktadır; sunucu bellek ayak izi 210\,MB'den 464\,MB'ye
+yükselmektedir. Ucuz çalışma noktaları (SHAP 442{,}6\ms, LIME 645{,}2\ms)
+literatürdeki bir saniyelik gerçek zamanlılık sınırının altında kalmaktadır. Bu
+sayılar, güven eşikli seçici açıklama mekanizmasının niçin gerekli olduğunu
+niceliksel olarak ortaya koymaktadır.
+\end{abstract}
+
+\begin{IEEEkeywords}
+açıklanabilir yapay zekâ, stres tespiti, WESAD, sis bilişim, gerçek zamanlı
+sistemler, hesaplama maliyeti, SHAP, LIME
+\end{IEEEkeywords}
+
+%=======================================================================
+\section{Giriş}
+%=======================================================================
+
+Giyilebilir sensörlerden sürekli stres izleme, sağlık ve insan--bilgisayar
+etkileşimi uygulamaları için olgunlaşmış bir problemdir. WESAD \cite{schmidt2018}
+gibi ölçüt veri kümeleri üzerinde \%90'ın üzerinde doğruluk rutin biçimde
+bildirilmekte \cite{kasnesis2025}, model kararlarının şeffaflığı için de SHAP
+\cite{lundberg2017}, LIME \cite{ribeiro2016} ve Integrated Gradients
+\cite{sundararajan2017} gibi post-hoc açıklayıcılar yaygın olarak
+kullanılmaktadır.
+
+Ancak bu iki gelişme birbirinden bağımsız ilerlemiştir. Sınıflandırma başarımını
+raporlayan çalışmalar açıklamanın maliyetini, açıklama üreten çalışmalar da
+sistemin zamanlamasını ölçmemektedir. Nauta ve ark.'nın Co-12 değerlendirme
+çerçevesi bu dışlamayı açıkça yapar: \emph{``çalışma süresi gibi, açıklama
+kalitesini doğrudan etkilemeyen ölçütler hariç tutulmuştur''} \cite{nauta2023}.
+Quantus, OpenXAI ve XAI-Bench gibi kıyaslama araçları da süre sütunu içermez.
+Sonuç olarak ``açıklama maliyeti'' için ne standart bir metrik, ne standart bir
+birim, ne de liderlik tablolarında bir yer vardır.
+
+Bu boşluk çevrimdışı bir çalışmada zararsızdır; gerçek zamanlı bir sistemde ise
+belirleyicidir. Tek bir açıklama, pencere güncelleme aralığından uzun sürüyorsa
+sistem kuyruk biriktirir ve gerçek zamanlı olmaktan çıkar. Franco de la Peña ve
+ark. bu sınırı açıkça koyar: \emph{``pencere başına bir saniyeden fazla süren bir
+XAI yöntemi gerçek zamanlı dağıtıma uygun değildir''} \cite{shats2025}.
+
+Bu rapor, bir bitirme projesi kapsamında üretilmiş ve dondurulmuş bir stres
+sınıflandırıcısını temel alarak bu eksiği kapatan ölçüm çalışmasını
+belgelemektedir. Katkılar şunlardır:
+
+\begin{enumerate}
+\item \textbf{Sızıntısız çevrimiçi değerlendirme.} Çevrimdışı eğitimde kullanılan
+denek bazlı z-skor normalizasyonunun nedensel (yalnızca geçmişi gören) karşılığı
+uygulanmış ve doğruluk üzerindeki etkisi ölçülmüştür.
+\item \textbf{Aşama bazlı gerçek zamanlı profil.} Yeniden örnekleme, ön işleme,
+tensör hazırlığı, çıkarım ve son işleme aşamaları ayrı ayrı, tekrarlı ve
+dönüşümlü koşularla, koşu içi ve koşu arası dağılımlar ayrıştırılarak
+ölçülmüştür.
+\item \textbf{Yedi metrikli taşıma katmanı ölçümü.} İstemci ve sunucu gerçek bir
+TCP bağlantısıyla ayrılmış, iki bağımsız yüksek çözünürlüklü saat arasında
+periyodik yeniden senkronizasyon ve doğrusal ara değerleme uygulanmıştır.
+\item \textbf{Açıklama maliyetinin taşıma metrikleriyle aynı bütçede
+raporlanması.} Bilgimiz dahilinde, pencere başına açıklama gecikmesini kuyruk
+gecikmesi, seğirme, bant genişliği ve sunucu kaynak kullanımıyla birlikte veren
+bir çalışma yoktur.
+\item \textbf{Açıklayıcı hiperparametre taraması.} LIME örnek sayısı, bölge
+sayısı ve çekirdek genişliği ile SHAP arka plan boyutu, örnek sayısı ve arka plan
+seçim yöntemi; süre \emph{ve} dört kalite ölçütü birlikte verilerek taranmıştır.
+\end{enumerate}
+
+Güven eşikli seçici açıklama mekanizması sisteme entegre edilmiş ve iki uç durum
+(hiç açıklama / her pencerede açıklama) uçtan uca ölçülmüştür. Ara eşiklerin
+taraması ve güven kalibrasyonu devam eden iştir; Bölüm~\ref{sec:devam}'de açıkça
+belirtilmiştir.
+
+%=======================================================================
+\section{Önceki Aşama: Çevrimdışı Sınıflandırma ve Açıklanabilirlik}
+\label{sec:onceki}
+%=======================================================================
+
+Bu bölüm, üzerine inşa edilen bitirme projesinin \cite{bitirme2026} kısa
+özetidir.
+
+WESAD veri kümesinde \cite{schmidt2018} göğüs (RespiBAN) ve bilek (Empatica E4)
+sensörlerinden gelen EDA, EKG, EMG, solunum, deri sıcaklığı, kan hacmi nabzı ve
+üç eksenli ivmeölçer sinyalleri zaman pencerelerine bölünerek stres / stres dışı
+olarak sınıflandırılmıştır. Üç mimari karşılaştırılmıştır: bir evrişimsel sinir
+ağı (CNN), hibrit bir CNN--LSTM ve Transformer tabanlı TranSensFusers
+\cite{kasnesis2025}. Sınıf dengesizliği odak kaybı (focal loss)
+\cite{lin2017} ile ele alınmış, değerlendirme denek bağımsız
+Leave-One-Subject-Out protokolüyle yapılmıştır. Pencere boyutu her mimari için
+ayrıca taranmış; en iyi sonuç 10 saniyelik pencerelerle eğitilen TranSensFusers
+modelinden elde edilerek \%91{,}13 doğruluk ve \%90{,}40 F1-skoru elde edilmiştir
+(Tablo~\ref{tab:onceki-model}).
+
+\begin{table}[t]
+\caption{Bitirme projesindeki en iyi yapılandırmalar (özet)}
+\label{tab:onceki-model}
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{Pencere} & \textbf{Doğruluk (\%)} & \textbf{F1 (\%)}\\
+\midrule
+CNN            & 30\,s & 87{,}63 & 86{,}29\\
+CNN--LSTM      & 30\,s & 86{,}08 & 83{,}66\\
+TranSensFusers & 10\,s & \textbf{91{,}13} & \textbf{90{,}40}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En iyi modele SHAP, LIME ve Integrated Gradients (IG) uygulanmış; açıklamalar
+sadakat, monotonluk, duyarlılık ve karmaşıklık olmak üzere dört nicel ölçütle
+değerlendirilmiştir (Tablo~\ref{tab:onceki-xai}). SHAP en dengeli ve en kararlı
+açıklamaları üretmiş, IG tamamlayıcı gradyan tabanlı bilgi sağlamış, LIME ise
+seyrek fakat daha az kararlı açıklamalar vermiştir. Kanal düzeyinde atıf
+analizinde elektrodermal aktivite ve kardiyak sinyaller baskın katkı sağlayarak
+fizyolojik beklentiyi doğrulamıştır.
+
+\begin{table}[t]
+\caption{Bitirme projesindeki XAI değerlendirmesi (TranSensFusers, 10\,s pencere)}
+\label{tab:onceki-xai}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Ölçüt} & \textbf{SHAP} & \textbf{LIME} & \textbf{IG} & \textbf{En iyi}\\
+\midrule
+Sadakat (ekleme)   & 0{,}4048 & 0{,}4282 & \textbf{0{,}4402} & \multirow{2}{*}{IG}\\
+Sadakat (silme)    & 0{,}2613 & 0{,}2153 & \textbf{0{,}2055} & \\
+Monotonluk ihlali  & \textbf{0{,}4047} & 0{,}5079 & 0{,}5300 & SHAP\\
+Duyarlılık         & \textbf{0{,}0038} & 0{,}0116 & 0{,}0053 & SHAP\\
+Karmaşıklık        & 0{,}4674 & \textbf{0{,}0066} & 0{,}4585 & LIME\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Ekleme eğrisinde yüksek, diğer üç ölçütte düşük değer iyidir.
+\end{table}
+
+\textbf{Bu çalışmanın çıkış noktası.} Bitirme projesinin bütün ölçümleri
+çevrimdışıdır: tüm kaydın istatistiğiyle normalize edilmiş pencereler, toplu
+çıkarım, ağ yok, süre ölçümü yok. Dolayısıyla ``model yanıtı 100\ms altı,
+açıklama 2\,s altı'' biçimindeki gereksinimler \emph{iddia} edilmiş ama test
+edilmemiştir. Bu rapor tam olarak bu gereksinimleri ölçülebilir hale getirir.
+
+\textbf{Kapsam daraltması.} Gerçek zamanlı çalışmada tek bir model (TemporalCNN)
+ve iki açıklayıcı (SHAP, LIME) kullanılmaktadır. Gerekçe, karşılaştırmanın sabit
+bir hesap bütçesi üzerinde yapılabilmesidir: TranSensFusers ve CNN--LSTM'in
+eklenmesi açıklama maliyetindeki farkı model maliyetindeki farkla karıştırırdı.
+Integrated Gradients, SHAP GradientExplainer ile aynı gradyan tabanlı maliyet
+sınıfında olduğu için kapsam dışı bırakılmıştır.
+
+%=======================================================================
+\section{İlgili Çalışmalar}
+%=======================================================================
+
+\subsection{Sis mimarisinde fizyolojik izleme}
+
+Erzurumluoğlu ve ark.\ \cite{erzurumluoglu2025}, DREAMER veri kümesi üzerinde
+duygu tanımayı bir sis (fog) mimarisine yerleştirmiş ve gecikme, kuyruk
+gecikmesi, çalışma süresi, yanıt süresi, seğirme, bant genişliği ve kaynak
+kullanımı olmak üzere yedi metriği raporlamıştır. Bu çalışma, sistem ölçüm
+çerçevemizin doğrudan referansıdır; aynı yedi metrik, aynı tanımlarla
+kullanılmıştır. Farklar ikidir: görev (stres, WESAD) ve eklenen boyut
+(açıklama maliyeti).
+
+\subsection{Açıklama maliyeti ölçümleri}
+
+Açıklayıcıların çalışma süresini raporlayan çalışmalar azdır ve büyük ölçüde
+fizyolojik alan dışındadır. Tablo~\ref{tab:lit-maliyet} doğrulanabilmiş
+değerleri toplar. Değerlerin donanım ve girdi boyutuna aşırı duyarlı olduğuna
+dikkat edilmelidir: aynı yöntem (KernelSHAP) bir çalışmada saniyeler, başka bir
+çalışmada dakikalar sürmektedir.
+
+\begin{table}[t]
+\caption{Literatürde bildirilen açıklama süreleri}
+\label{tab:lit-maliyet}
+\centering
+\small
+\begin{tabular}{p{2.1cm}p{2.4cm}p{2.7cm}}
+\toprule
+\textbf{Çalışma} & \textbf{Ölçülen} & \textbf{Donanım / girdi}\\
+\midrule
+ShaTS \cite{shats2025} & Sınır: $>$1\,s/pencere gerçek zamanlı değil; KernelSHAP sık sık aşıyor & i7-14700K + RTX 4080; girdi $10\times69$\\
+XAI-on-RAN \cite{basaran2025} & Taban 5{,}3\ms; SHAP ($m{=}16$) $\approx +15$\ms & A100; 5 boyutlu girdi\\
+Taguta ve ark. \cite{taguta2026} & Koşullu SHAP $+195$\ms, $+\%28$ CPU, toplam $\approx$555\ms & Raspberry Pi 4, 24 günlük canlı dağıtım\\
+Das ve ark. \cite{das2021} & LIME 5{,}91\,s; SHAP 695{,}2\,s & i7-6700K; 33 sensör $\times$ 30 adım LSTM\\
+Warnecke ve ark. \cite{warnecke2020} & KernelSHAP 9{,}1\,s; LIME 0{,}03--0{,}74\,s & Xeon E5; MLP/CNN\\
+FastSHAP \cite{jethani2022} & 1000 görüntü: FastSHAP 0{,}04\,dk; KernelSHAP 453--1089\,dk & V100 + 8 çekirdek\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Fizyolojik sinyal tarafında durum daha çarpıcıdır. Almadhor ve ark.
+\cite{almadhor2025} tam olarak bizim veri kümesi ailemizi (WESAD ve DREAMER) ve
+model ailemizi (1B-CNN) kullanmakta, üstelik Grad-CAM ve Integrated Gradients
+uygulamaktadır; buna karşın çıkarım süresi, XAI süresi, bellek veya donanım
+bilgisi vermemektedir. Benzer biçimde El Rashidy ve ark.\ \cite{elrashidy2025}
+sis mimarisinde LIME ve Grad-CAM ile duygu tanıma yapmakta, yine de çıkarım
+başına gecikme ya da açıklama maliyeti raporlamamaktadır.
+
+\subsection{Seçici ve koşullu açıklama}
+
+Hesabı güvene göre dağıtma fikri yeni değildir. BranchyNet \cite{teerapittayanon2017}
+ve Berestizshevsky ve Even \cite{berestizshevsky2018} softmax güvenine göre
+çıkarımı erken keser. Açıklama tarafında Paes ve ark.\ \cite{paes2024} bütçeli
+seçici açıklama önerir; kapı kararını ucuz açıklayıcının belirsizliği verir.
+Artelt ve ark.\ \cite{artelt2023} yalnızca reddedilen örnekler için açıklama
+üretir; gerekçeleri epistemiktir ve süre ölçmezler. Taguta ve ark.
+\cite{taguta2026} SHAP'i koşullu tetikleyen, bilgimiz dahilinde donanım üzerinde
+ölçülmüş tek sistem çalışmasıdır.
+
+Dolayısıyla bu çalışma \emph{mekanizmayı} yeni diye sunmamaktadır. Katkı,
+mekanizmanın sürekli gerçek zamanlı fizyolojik izleme bağlamında deneysel
+olarak karakterize edilmesi ve açıklama maliyetinin taşıma katmanı metrikleriyle
+aynı bütçede raporlanmasıdır.
+
+\subsection{Boşluk}
+
+Alan üç ayrık gruba bölünmüştür: (i) sistem metriklerini ölçen, XAI içermeyen
+çalışmalar \cite{erzurumluoglu2025}; (ii) XAI maliyetini ölçen, ağ metriği
+vermeyen çalışmalar \cite{shats2025,basaran2025}; (iii) fizyolojik sinyalde XAI
+uygulayan, hiç maliyet vermeyen çalışmalar \cite{almadhor2025,elrashidy2025}. Bu
+rapor üçünün kesişiminde konumlanmaktadır.\footnote{Bu bölümün hazırlığında
+kullanılan iç literatür notlarında, doğrulanamayan veya kendi içinde tutarsız
+sayılar içeren kaynaklar işaretlenmiş ve kaynakçaya alınmamıştır.}
+
+%=======================================================================
+\section{Sistem Tasarımı}
+%=======================================================================
+
+Sistemin genel akışı Şekil~\ref{fig:sistem}'de verilmiştir.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  node distance=3.2mm,
+  blok/.style={draw,rounded corners=1.5pt,align=center,font=\scriptsize,
+               minimum height=6.2mm,inner xsep=2pt},
+  ok/.style={-{Latex[length=1.6mm]},thick}
+]
+\node[blok,fill=black!5,minimum width=17mm] (kayit) {WESAD kaydı\\(ham hız)};
+\node[blok,fill=black!5,minimum width=17mm,below=of kayit] (tampon) {yuvarlanan tampon\\(500\ms tik)};
+\node[blok,fill=black!5,minimum width=17mm,below=of tampon] (gonder) {paketle ve gönder\\(TCP)};
+\node[draw,dashed,inner sep=2.0mm,fit=(kayit)(tampon)(gonder),
+      label={[font=\scriptsize\bfseries]above:İSTEMCİ}] (istemci) {};
+
+\node[blok,fill=black!10,minimum width=20mm,right=16mm of kayit] (kuyruk) {açık istek kuyruğu\\($t_{\mathrm{recv}}$ damgası)};
+\node[blok,fill=black!10,minimum width=20mm,below=of kuyruk] (on) {yeniden örnekleme\\+ nedensel z-skor};
+\node[blok,fill=black!10,minimum width=20mm,below=of on] (cikarim) {TemporalCNN\\çıkarım + softmax};
+\node[blok,fill=black!20,minimum width=20mm,below=of cikarim] (kapi) {güven $<$ eşik ?};
+\node[blok,fill=black!10,minimum width=20mm,below=of kapi] (xai) {LIME / SHAP\\açıklama};
+\node[draw,dashed,inner sep=2.0mm,fit=(kuyruk)(on)(cikarim)(kapi)(xai),
+      label={[font=\scriptsize\bfseries]above:SUNUCU (tek çalışan)}] (sunucu) {};
+
+\draw[ok] (kayit) -- (tampon);
+\draw[ok] (tampon) -- (gonder);
+\draw[ok] (gonder.east) -- ++(4mm,0) |- (kuyruk.west);
+\draw[ok] (kuyruk) -- (on);
+\draw[ok] (on) -- (cikarim);
+\draw[ok] (cikarim) -- (kapi);
+\draw[ok] (kapi) -- node[right,font=\scriptsize]{evet} (xai);
+\draw[ok] (kapi.east) -- ++(4mm,0) node[right,font=\scriptsize,xshift=-1mm]{hayır};
+\end{tikzpicture}
+\caption{Sistem akışı. Açıklama, tahminle aynı çalışanda ve çalışma süresinin
+\emph{içinde} üretilir; ayrı bir iş parçacığına atılsaydı maliyeti ölçülemezdi.}
+\label{fig:sistem}
+\end{figure}
+
+\subsection{Model ve pencereleme}
+
+Sınıflandırıcı, çevrimdışı aşamada seçilip dondurulmuş bir TemporalCNN'dir:
+iki evrişim bloğu (\texttt{[32, 128]} filtre, çekirdek boyu 9, her blokta
+BatchNorm--ReLU--MaxPool--Dropout), ardından global ortalama havuzlama ve iki
+tam bağlı katman. Toplam 49\,890 parametre içerir. Girdi 14 kanallı, 64\,Hz'e
+indirgenmiş 10 saniyelik bir penceredir ($640\times14$); pencereler \%50
+örtüşmeyle, yani 5 saniyede bir üretilir. Model 13 denekle eğitilmiş, S11 ve S14
+tutulmuş (held-out) denek olarak ayrılmıştır; çevrimdışı ağırlıklı F1 değeri
+0{,}9386'dır.
+
+Kanal sırası eğitim ardışık düzeniyle birebir aynı olmak zorundadır (önce göğüs
+sekiz kanal, sonra bilek altı kanal). Sıra bozulduğunda doğruluğun 1{,}00'den
+0{,}52'ye düştüğü gözlenmiş, bu nedenle sıra kod içinde açıkça belgelenmiştir.
+
+\subsection{Sızıntısız çevrimiçi normalizasyon}
+
+Çevrimdışı eğitimde veri denek bazlı \texttt{StandardScaler} ile normalize
+edilmişti. Gerçek zamanlı bir sistemde bu doğrudan kullanılamaz: bir deneğin tüm
+kaydının istatistiğini bilmek geleceğe sızmaktır. İki sızıntısız alternatif
+uygulanmış ve ölçülmüştür:
+
+\begin{itemize}
+\item \textbf{\texttt{running}:} Welford algoritmasıyla, yalnızca o ana kadar
+görülmüş veriden nedensel ortalama ve standart sapma. İstatistik güncelleme
+maliyeti her tikte ödenir ve dürüstlük gereği pencerenin ön işleme süresine
+eklenir.
+\item \textbf{\texttt{fixed}:} Yalnızca eğitim deneklerinden hesaplanmış tek bir
+sabit ortalama ve standart sapma. Yeni kullanıcı hakkında hiçbir şey
+bilinmeyen katı dağıtım senaryosuna karşılık gelir.
+\end{itemize}
+
+İki uzayın ürettiği pencereler ölçülmüştür: bağıl L2 farkı 0{,}77, standart
+sapma 1{,}00'e karşı 1{,}25'tir. Yani nedensel ve denek bazlı normalizasyon
+\emph{aynı girdi uzayını vermez}. Bu, XAI ölçümlerinin hangi uzayda yapılması
+gerektiğini belirleyen kritik bulgudur (Bölüm~\ref{sec:xai-tarama}).
+
+\subsection{İki ardışık düzen yolu}
+
+Yeniden örneklemenin nerede yapıldığı bir tasarım kararıdır ve ölçüme doğrudan
+girer:
+
+\begin{itemize}
+\item \textbf{\texttt{prepared}:} Tüm kayıt, yeniden oynatma başlamadan önce
+64\,Hz'e indirgenir; yeniden örnekleme ölçümün \emph{dışında} kalır.
+\item \textbf{\texttt{native}:} Her sensör kendi hızında akar (göğüs 700\,Hz,
+bilek 32/64/4\,Hz), indirgeme sunucuda her pencerede yapılır ve \emph{ölçülür}.
+\end{itemize}
+
+Gerçek bir sistemde sensör ham hızında veri gönderir; dolayısıyla
+\texttt{native} gerçekçi olan yoldur ve tüm ana sonuçlar bu yolda üretilmiştir.
+
+\subsection{İstemci--sunucu ayrımı}
+
+Erken aşamalarda istemci ve sunucu aynı süreçte çalışıyordu; bu, ağ kaynaklı
+metriklerin tanım gereği sıfır olması demekti. \texttt{serving/} paketi ikisini
+gerçek bir TCP bağlantısıyla ayırır: \texttt{protocol.py} tel formatını,
+çerçevelemeyi ve saat senkronizasyonunu; \texttt{server.py} açık istek kuyruğunu
+ve tek çalışanı; \texttt{client.py} ham hızda gönderen sensör istemcisini
+tanımlar. Sunucu WESAD verisine ihtiyaç duymaz; veri tamamen istemcide kalır ve
+sunucuya yalnızca ham sinyal parçaları akar.
+
+\textbf{Açık istek kuyruğu neden gerekli.} İlk sürümde paket okunur okunmaz aynı
+yerde işleniyordu; $t_{\mathrm{start}}$ ile $t_{\mathrm{recv}}$ bitişik olduğu
+için kuyruk gecikmesi her zaman sıfıra yakın okunuyor ve bekleme süresi
+gecikmenin içinde gizleniyordu. Şimdi okuyucu görev paketi alıp varış zamanını
+damgalar ve ortak kuyruğa koyar; tek çalışan kuyruğu sırayla boşaltır. İki
+istemciyle p99 kuyruk gecikmesi 0{,}37\ms'den 5{,}50\ms'ye çıkmıştır, yani
+metrik artık gerçekten bekleme ölçmektedir.
+
+\subsection{Saat katmanı ve kayma düzeltmesi}
+\label{sec:saat}
+
+İlk sürüm \texttt{time.time\_ns()} kullanıyordu. Windows'ta bu sayacın
+çözünürlüğü ölçülmüş ve 15{,}6\ms çıkmıştır. Geri döngü (loopback) gecikmesi
+0{,}1\ms mertebesinde olduğundan gecikme medyanı tam sıfır okuyordu; metrik
+tamamen anlamsızdı. \texttt{perf\_counter\_ns} 100\,ns çözünürlük verir, ancak
+referans noktası sürece özeldir. Bu nedenle bağlantı başında NTP mantığıyla saat
+farkı ölçülür: on iki PING/PONG turu atılır ve en düşük gidiş-dönüş süresine
+sahip tur seçilir.
+
+Tek bir ölçüm uzun koşularda yetmez: iki kristal aynı hızda tiklemediği için
+fark zamanla kayar. 87 dakikalık bir Wi-Fi koşusunda kayma, gecikme medyanını
+\emph{negatife} düşürerek metriği geçersiz kılmıştır. Bu nedenle saat farkı
+varsayılan olarak 60 saniyede bir yeniden ölçülür ve her paketin gecikmesi iki
+ölçüm arasında doğrusal ara değerlemeyle düzeltilir. Ölçüm, son cevap alındıktan
+sonraki sessiz anda dört turda yapılır. Özete toplam kayma ve kayma hızı (ppm)
+yazılır; ayrıca gecikme medyanı
+$(\text{yanıt} - \text{çalışma} - \text{kuyruk})/2$ ile karşılaştırılarak
+tutarlılık denetimi basılır.
+
+Gecikme belirsizliği gidiş-dönüş süresinin yarısı kadardır:
+geri döngüde $\pm0{,}13$\ms, Ethernet'te $\pm0{,}25$--$1$\ms, Wi-Fi'da
+$\pm1$--$10$\ms. Wi-Fi'da tek yönlü gecikmenin hata payı, ölçülen değerin
+kendisiyle aynı mertebeye çıkabilir. Bundan \emph{etkilenmeyen} metrikler
+çalışma süresi ve kuyruk gecikmesi (ikisi de sunucu saati) ile yanıt süresi ve
+seğirmedir (ikisi de istemci saati).
+
+\subsection{Ölçülen yedi metrik}
+
+Tanımlar referans çalışmayla \cite{erzurumluoglu2025} aynıdır:
+
+\begin{itemize}
+\item \textbf{Gecikme (latency):} paketin istemciden sunucuya ulaşması; iki saat,
+fark düzeltmesi gerektirir.
+\item \textbf{Kuyruk gecikmesi:} çalışan meşgulken kuyrukta bekleme; sunucu saati.
+\item \textbf{Çalışma süresi (execution):} ardışık düzenin çalışma süresi; sunucu
+saati. Açıklama üretildiğinde bu sürenin içindedir.
+\item \textbf{Yanıt süresi (response):} istemcinin gördüğü toplam süre; istemci
+saati.
+\item \textbf{Seğirme (jitter):} yanıt süresinin ardışık mutlak değişiminin
+ortalaması.
+\item \textbf{Bant genişliği:} gönderilen ve alınan bayt / süre.
+\item \textbf{Kaynak kullanımı:} sunucu tarafı CPU yüzdesi ve yerleşik bellek
+(RSS).
+\end{itemize}
+
+\subsection{Açıklayıcılar}
+
+Açıklayıcılar sunucunun içinde, tek pencere üzerinde çalışacak biçimde
+yazılmıştır. Ortak arayüz \texttt{explain(pencere)} çağrısıyla $(C,T)$ boyutlu
+bir atıf haritası döndürür. Pencere yönü iki farklı gösterimde dolaştığı için
+($(640,14)$ tampon yönü, $(14,640)$ model yönü) dönüşüm kanal sayısına bakarak
+otomatik yapılır.
+
+\textbf{Bölge tabanlı LIME.} Hazır \texttt{lime} paketi kullanılmamıştır: girdi
+$14\times640 = 8960$ değerlik bir zaman serisidir ve her örneği ayrı değişken
+saymak hem çok pahalı hem de yorumlanamazdır. Görüntüdeki ``süper piksel''in
+buradaki karşılığı \emph{zaman dilimi $\times$ kanal} bölgeleridir; örneğin 20
+dilim $\times$ 14 kanal $=$ 280 bölge. Bir bölge kapatıldığında o kanalın o
+dilimi \emph{kanalın kendi ortalamasıyla} değiştirilir. Sıfırlamak fizyolojik
+olarak anlamsız olurdu: normalize edilmiş sinyalde sıfır, o kanalın ortalama
+seviyesi değil kaydın ortalamasıdır. Maskeler sabit tohumla örneklenir, ağırlık
+$w = \sqrt{\exp(-d^2/\sigma^2)}$ üssel çekirdeğiyle verilir ($d$: kapalı bölge
+oranı, $\sigma$: çekirdek genişliği) ve katsayılar Ridge regresyonuyla
+çözülür. Maliyet, örnek sayısı $\times$ ileri geçiş olarak doğrusal büyür.
+
+\textbf{SHAP GradientExplainer.} Arka plan kümesi bir kez üretilip diske
+yazılır (100 pencere, k-ortalamalar, S2--S5 deneklerinden, sunucunun gördüğü
+nedensel uzayda). Gerekçe ikilidir: sunucuda her açılışta yeniden kümeleme
+saniyeler alır ve taramada kullanılan kümeyle birebir aynı sonucu vermez.
+Tohum sabitlenmiştir; aksi halde aynı pencere iki kez açıklandığında farklı atıf
+çıkar ve ``girdiye duyarlılık'' ölçütü yöntemin kendi rastgeleliğini de sayar.
+Bu ölçülmüştür: tohum sabitlenince SHAP'in duyarlılık değeri 0{,}139'dan
+0{,}075'e düşmüş, yani farkın neredeyse yarısının yöntemin kendi gürültüsü
+olduğu görülmüştür.
+
+\textbf{Isınma.} SHAP'in \emph{ilk} çağrısı ölçüm makinesinde 12{,}4 saniye
+sürmüştür; sonraki çağrılar 0{,}85 saniyedir. Fark, grafik kurulumu ve önbellek
+ısınmasıdır. Isıtılmazsa bu 12 saniye ilk açıklamada tek çalışanı bloklar ve tüm
+kuyruk arkasında birikir. Bu nedenle açıklayıcı sunucu açılışında bir kez sahte
+bir pencereyle çalıştırılır ve ilk çağrı süresi rapora yazılır.
+
+\subsection{Açıklama kalitesi ölçütleri}
+
+Dört ölçüt, bitirme projesindekiyle aynı tanımlarla hesaplanır:
+
+\begin{itemize}
+\item \textbf{Silme (deletion):} bölgeler en önemliden başlayarak kanal
+ortalamasıyla kapatılır; eğri altındaki alanın \emph{düşük} olması sadakat
+göstergesidir.
+\item \textbf{Ekleme (insertion):} taban çizgisinden başlanarak en önemli
+bölgeler eklenir; alanın \emph{yüksek} olması iyidir.
+\item \textbf{Sadakat:} $\mathrm{AUC}_{\mathrm{ekleme}} -
+\mathrm{AUC}_{\mathrm{silme}}$.
+\item \textbf{Monotonluk:} ekleme eğrisinde azalmayan adımların oranı.
+\item \textbf{Duyarlılık:} girdiye $0{,}05\sigma$ ölçeğinde Gauss gürültüsü
+eklendiğinde atıfın normalize L2 değişimi; \emph{düşük} iyidir.
+\item \textbf{Kendi-kararsızlığı:} aynı pencere yeniden açıklandığında atıfın
+değişimi. Deterministik bir yöntemde sıfırdır. Bu ayrı raporlanmazsa ``kararsız
+yöntem'' ile ``girdiye duyarlı yöntem'' birbirine karışır.
+\end{itemize}
+
+\subsection{Güven eşikli seçici açıklama}
+
+Sunucu, softmax çıktısının maksimumunu güven olarak kullanır ve eşiğin altında
+kalan pencerelerde açıklama üretir:
+
+\begin{equation}
+\text{açıkla} =
+\begin{cases}
+\text{hayır}, & \tau \le 0\\
+\text{evet}, & \tau \ge 1\\
+c < \tau, & \text{aksi halde}
+\end{cases}
+\end{equation}
+
+\noindent burada $c$ güven, $\tau$ eşiktir. $\tau = 0$ ve $\tau = 1$ uç durumlar
+kasıtlı olarak ayrı ele alınır; bunlar kontrol koşularıdır (XAI'siz taban ve en
+pahalı durum). $\tau \ge 1$ karşılaştırması ayrıca ele alınmıştır çünkü softmax
+çıktısı tam 1{,}0 okuyabildiğinde ``$c < 1{,}0$'' kuralı nadiren de olsa
+pencere atlıyordu.
+
+Açıklama, tahminle aynı çalışanda ve çalışma süresinin içinde üretilir. Ayrı bir
+iş parçacığına atılsaydı maliyeti görünmez olurdu; deneyin bütün amacı o maliyeti
+ölçmektir.
+
+%=======================================================================
+\section{Deney Düzeneği}
+%=======================================================================
+
+\subsection{Donanım ve ağ}
+
+Üç yerleşim ölçülmüştür (Tablo~\ref{tab:donanim}). ``Uç'' terimi burada
+\emph{ortak yerleşim} anlamındadır: istemci ve sunucu aynı makinede, ayrı
+süreçlerde, geri döngü üzerinden haberleşir. Giyilebilir cihaz anlamında
+kullanılmamaktadır.
+
+\begin{table}[t]
+\caption{Ölçüm ortamları}
+\label{tab:donanim}
+\centering
+\small
+\begin{tabular}{p{1.3cm}p{3.1cm}p{2.7cm}}
+\toprule
+\textbf{Yerleşim} & \textbf{Sunucu donanımı} & \textbf{Bağlantı}\\
+\midrule
+Geri döngü & İstemciyle aynı makine (Intel, 20 çekirdek, 16\,GB, Win 10) & 127.0.0.1\\
+Uç (ortak) & Aynı makine, ayrı süreç & 127.0.0.1\\
+Sis & Ayrı fiziksel makine (Intel, 12 çekirdek, 16\,GB, Win 11, PyTorch 2.14 CPU) & Wi-Fi, ev yönlendiricisi\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Önemli bir sınırlılık.} İki normal bilgisayar arasındaki deney gerçek ağ
+gecikmesini, seğirmeyi ve bant genişliğini verir. Ancak bu bir \emph{dağıtık
+yerleşim} ölçümüdür, bir \emph{sis düğümü} ölçümü değildir: sis tanımındaki
+kaynak kısıtı yoktur. Rapor boyunca bu ayrım korunmuştur.
+
+\subsection{Ölçüm kuralları}
+
+Aşağıdaki kurallar bütün koşularda geçerlidir:
+
+\begin{enumerate}
+\item \textbf{Yığın boyutu 1.} Gerçek kullanıcı tek pencere gönderir.
+\item \textbf{Isınma hariç.} İlk 15 pencere (tek süreçli koşularda 30)
+istatistiğe girmez.
+\item \textbf{Ortalama, medyan, p95, p99 birlikte.} ``En hızlı çalışma''
+raporlanmaz.
+\item \textbf{Tekrarlı ve dönüşümlü.} Karşılaştırmalarda üç veya dört tekrar,
+sıra A, B, A, B biçimindedir; böylece işlemci ısınmasından kaynaklanan kayma
+tüm yapılandırmalara eşit dağılır. Ardışık koşulsaydı en son ölçülen ortam
+sistematik olarak yavaş görünürdü.
+\item \textbf{Tek iş parçacığı.} Gerekçe hız değil kararlılıktır
+(Bölüm~\ref{sec:tekrar}).
+\item \textbf{İki ayrı dağılım karıştırılmaz.} Koşu içi dağılım (bir koşudaki
+yüzlerce pencerenin p50/p95/p99'u) sistemin en kötü durum davranışını; koşu arası
+yayılım (aynı deney tekrarlanınca medyanın oynaması) ölçümün güven aralığını
+verir.
+\item \textbf{Pencere gecikmesi $\ne$ hesaplama gecikmesi.} 10 saniyelik pencere
+ve 5 saniyelik güncelleme aralığı verinin \emph{toplanma} süresidir; bu rapor
+\emph{hesaplama} süresini ölçer. İkisi her tabloda ayrı tutulur.
+\item \textbf{Her sonuç JSON'a yazılır}; tablolar JSON'dan üretilir, elle sayı
+taşınmaz.
+\end{enumerate}
+
+\subsection{Koşu envanteri}
+
+Tablo~\ref{tab:kosular} bu raporda kullanılan ölçüm kümelerini listeler.
+
+\begin{table}[t]
+\caption{Rapordaki ölçüm kümeleri}
+\label{tab:kosular}
+\centering
+\small
+\begin{tabular}{p{1.5cm}p{3.0cm}p{2.6cm}}
+\toprule
+\textbf{Küme} & \textbf{İçerik} & \textbf{Ölçek}\\
+\midrule
+Tek süreç & Aşama bazlı profil, \texttt{native} yol & S11+S14, 2123 pencere\\
+Kıyas & İplik taraması, ardışık düzen karşılaştırması & S11, 4 tur $\times$ 587 pencere\\
+Geri döngü & Yedi metrik, tek ve iki istemci & S11, 10\,dk / S11+S14\\
+Sis & Beş XAI durumu, uçtan uca & S11, 600 tik, 44 ölçülen pencere\\
+Yerleşim & Uç--sis, dönüşümlü & S11, 3 tur $\times$ 600 tik\\
+XAI tarama & 17 yapılandırma, GPU & 40 pencere (duyarlılık: 10)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=======================================================================
+\section{Sonuçlar}
+%=======================================================================
+
+\subsection{Aşama bazlı hesaplama profili}
+
+Tablo~\ref{tab:asama}, tek süreçli \texttt{native} yolda, nedensel
+normalizasyonla ölçülen aşama sürelerini verir. Toplam hesaplama gecikmesi
+medyanı 4{,}69\ms, p95 6{,}66\ms'dir. En pahalı iki aşama çıkarım (2{,}68\ms
+medyan) ve yeniden örneklemedir (1{,}38\ms medyan).
+
+\begin{table}[t]
+\caption{Aşama bazlı hesaplama süresi (S11+S14, \texttt{native} yol,
+nedensel normalizasyon, 2123 pencere, 30 ısınma penceresi hariç, tek iplik)}
+\label{tab:asama}
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Aşama} & \textbf{ort.} & \textbf{medyan} & \textbf{p95} & \textbf{p99}\\
+\midrule
+Yeniden örnekleme & 1{,}507 & 1{,}378 & 2{,}328 & 3{,}259\\
+Ön işleme         & 0{,}251 & 0{,}218 & 0{,}401 & 0{,}924\\
+Tensör hazırlığı  & 0{,}159 & 0{,}141 & 0{,}249 & 0{,}513\\
+Çıkarım           & 2{,}951 & 2{,}682 & 3{,}997 & 5{,}720\\
+Son işleme        & 0{,}108 & 0{,}086 & 0{,}171 & 0{,}380\\
+\midrule
+\textbf{Toplam}   & \textbf{5{,}034} & \textbf{4{,}689} & \textbf{6{,}658} & \textbf{9{,}170}\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Bütün değerler milisaniyedir. Seğirme (ardışık mutlak fark
+ortalaması) 1{,}155\ms; işlem CPU'su ort.\ \%90{,}1; RSS ort.\ 470{,}2\,MB,
+tepe 558{,}0\,MB.
+\end{table}
+
+Bu profil, sistemin hesap tarafının ne kadar ucuz olduğunun temel kanıtıdır:
+$640\times14$'lük bir pencere, tek iş parçacığında 5\ms'nin altında
+sınıflandırılmaktadır. Bu sayı, aynı pencerenin \emph{açıklanmasının} maliyetiyle
+(Bölüm~\ref{sec:fog-xai}) karşılaştırıldığında iki mertebelik fark ortaya
+çıkmaktadır.
+
+\subsection{Ölçümün tekrarlanabilirliği}
+\label{sec:tekrar}
+
+Tek bir koşunun sonucu bu makinede güvenilir değildir: aynı yapılandırma arka
+arkaya koşulduğunda değerler yukarı kaymaktadır (işlemci frekans ölçeklemesi).
+Bu nedenle bütün karşılaştırmalar dönüşümlü tekrarla yapılmıştır.
+
+Tablo~\ref{tab:iplik} iş parçacığı sayısının etkisini gösterir. Medyanlar
+arasındaki fark, koşu arası yayılımın altında kalmaktadır; yani bu iş yükünde
+iplik sayısı belirleyici değildir. Varsayılanın 1 olmasının gerekçesi hız değil
+\textbf{kararlılıktır}: tek iplikte yayılım \%2{,}9 iken iki ve dört iplikte
+\%10{,}7--14{,}7'dir. Bu, izole mikro-kıyaslamaların yanıltıcı olduğunu ve
+kararın her zaman tam ardışık düzen üzerinde verilmesi gerektiğini gösteren bir
+örnektir.
+
+\begin{table}[t]
+\caption{İş parçacığı taraması (S11, 4 dönüşümlü tur, koşu içi medyanların
+medyanı)}
+\label{tab:iplik}
+\centering
+\small
+\begin{tabular}{crrrr}
+\toprule
+\textbf{İplik} & \textbf{Toplam (ms)} & \textbf{Yayılım} & \textbf{VK} & \textbf{p95 (ms)}\\
+\midrule
+1 & \textbf{3{,}397} & \textbf{\%2{,}9} & \textbf{\%1{,}2} & 4{,}980\\
+2 & 3{,}933 & \%14{,}7 & \%6{,}0 & 5{,}774\\
+4 & 3{,}684 & \%10{,}7 & \%4{,}5 & 5{,}508\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize VK: değişim katsayısı. Üç yapılandırmada sınıflandırma sonucu
+birebir aynıdır (doğruluk 0{,}8586), yani iplik sayısı yalnızca zamanlamayı
+etkiler.
+\end{table}
+
+\subsection{Yeniden örneklemenin yeri ve bant genişliği}
+
+Tablo~\ref{tab:pipeline}, yeniden örneklemenin ölçüme dahil edilip
+edilmemesinin etkisini verir. Yeniden örnekleme tek başına toplamın yaklaşık
+\%28{,}6'sıdır, yani çıkarımdan sonraki en pahalı aşamadır. İki yol arasındaki
+\%38{,}6'lık fark, koşu arası yayılımın (\%8--9) çok üstünde olduğu için
+gerçektir.
+
+\begin{table}[t]
+\caption{Ardışık düzen karşılaştırması (S11, 4 dönüşümlü tur, tek iplik)}
+\label{tab:pipeline}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Yol} & \textbf{Yen.\ ör.} & \textbf{Ön işl.} & \textbf{Çıkarım} & \textbf{Toplam} & \textbf{p95}\\
+\midrule
+\texttt{prepared} & ---       & 0{,}580 & 2{,}969 & 3{,}971 & 6{,}349\\
+\texttt{native}   & 1{,}573   & 0{,}252 & 3{,}039 & 5{,}502 & 7{,}951\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Bütün değerler milisaniyedir. Koşu arası yayılım: \texttt{prepared}
+\%9{,}4, \texttt{native} \%8{,}1.
+\end{table}
+
+Doğruluk korunmaktadır. Pencere başına yeniden örnekleme, tüm sinyali bir kerede
+indirmekle kenar etkisi nedeniyle birebir aynı sonucu vermez, ancak fark
+ölçülebilir düzeyin altındadır: \texttt{prepared} 0{,}8586 (587 pencere),
+\texttt{native} 0{,}8574 (589 pencere).
+
+\textbf{Bant genişliği karşılığı.} 500\ms'lik bir tikte ham hızda 11\,536 bayt,
+64\,Hz'e indirilmiş halde 1\,792 bayt taşınır. Yani indirgemeyi sunucuda yapmak
+ağdan \textbf{6{,}4 kat} fazla veri geçirmek demektir. Bu, yerleşim kararının
+sayısal dayanağıdır: hesabı sunucuya taşımak ağ maliyetini artırır.
+
+\subsection{Ortak yerleşimde yedi metrik}
+
+Tablo~\ref{tab:loopback}, gerçek sensör hızında, tek istemciyle, S11'in ilk 10
+dakikası boyunca geri döngü üzerinden ölçülen yedi metriği verir.
+
+\begin{table}[t]
+\caption{Geri döngüde yedi metrik (S11, tek istemci, gerçek zamanlı, 10\,dk,
+104 ölçülen pencere)}
+\label{tab:loopback}
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Metrik} & \textbf{ort.} & \textbf{medyan} & \textbf{p95} & \textbf{p99}\\
+\midrule
+Gecikme          & 0{,}909 & 0{,}809 & 1{,}466 & 2{,}707\\
+Kuyruk gecikmesi & 0{,}062 & 0{,}045 & 0{,}085 & 0{,}622\\
+Çalışma süresi   & 8{,}273 & 7{,}179 & 10{,}524 & 11{,}268\\
+Yanıt süresi     & 9{,}884 & 8{,}821 & 12{,}698 & 13{,}927\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Değerler milisaniyedir. Seğirme 3{,}529\ms. Bant genişliği
+184{,}8\,kbps gönderilen, 2{,}3\,kbps alınan, toplam 187{,}2\,kbps. Sunucu içi
+aşama dökümü (ortalama): yeniden örnekleme 2{,}211, ön işleme 0{,}449, tensör
+0{,}324, çıkarım 4{,}648, son işleme 0{,}135\ms.
+\end{table}
+
+\textbf{Doğrulama.} Ayrı bir geri döngü koşusunda (iki istemci, S11 ve S14'ün
+tam kayıtları, 2123 pencere) tek süreçli \texttt{native} yol ile
+istemci--sunucu yolu aynı veride birebir aynı sınıflandırma sonucunu
+vermektedir: doğruluk 0{,}8222, stres F1 0{,}6944, karışıklık matrisi
+TN$=$743, FP$=$184, FN$=$29, TP$=$242. Bu, ağ katmanının hesabı bozmadığının
+kanıtıdır. Tablo~\ref{tab:loopback}'teki on dakikalık koşu S11'in yalnızca
+başını kapsadığı için sınıflandırma açısından bilgi taşımaz; amacı zamanlama
+ölçümüdür.
+
+\textbf{Yakalanan bir hata.} Tek süreçli \texttt{native} yolda, çoğunluk etiketi
+geçersiz olan pencereler tamamen atlanıyordu; bu, normalizasyon istatistiğinin o
+pencerelerde hiç güncellenmemesi anlamına geliyordu. Gerçek bir sunucu etiketi
+görmez, dolayısıyla böyle bir atlama yapamaz. Düzeltildikten sonra doğruluk
+0{,}7674'ten 0{,}8222'ye yükselmiş ve iki yol birbirine eşitlenmiştir. Geçersiz
+etiketli pencereler artık baştan sona işlenmekte, yalnızca sınıflandırma
+raporundan çıkarılmaktadır.
+
+\subsection{Uç--sis yerleşim karşılaştırması}
+
+Tablo~\ref{tab:yerlesim}, aynı deneyin iki yerleşimde, üç dönüşümlü turla
+koşulmuş halini verir. Değerler koşu içi medyanların medyanı, parantez içindeki
+sayılar koşu arası yayılımdır.
+
+\begin{table}[t]
+\caption{Uç (ortak yerleşim) ve sis karşılaştırması (S11, 600 tik, 3 dönüşümlü
+tur, açıklayıcı kapalı)}
+\label{tab:yerlesim}
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Metrik} & \textbf{Uç (ortak)} & \textbf{Sis (Wi-Fi)}\\
+\midrule
+Gecikme (medyan)        & 0{,}928 (\%7{,}0)  & 4{,}910 (\%44{,}7)\\
+Gecikme (p95)           & 2{,}073            & 66{,}179\\
+Kuyruk gecikmesi        & 0{,}048            & 0{,}028\\
+Çalışma süresi (medyan) & 6{,}344 (\%15{,}4) & \textbf{3{,}372 (\%6{,}3)}\\
+Çalışma süresi (p95)    & 8{,}797            & 4{,}400\\
+Yanıt süresi (medyan)   & \textbf{7{,}880}   & 10{,}151\\
+Yanıt süresi (p95)      & 10{,}360           & 74{,}355\\
+Seğirme                 & 2{,}221            & 22{,}600\\
+Bant genişliği (kbps)   & 187{,}17           & 187{,}11\\
+Sunucu CPU              & \%0{,}574          & \%0{,}111\\
+Sunucu RSS (MB)         & 186{,}8            & 209{,}5\\
+Saat belirsizliği       & 0{,}122            & 1{,}359\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Değerler aksi belirtilmedikçe milisaniyedir.
+\end{table}
+
+Üç gözlem öne çıkmaktadır. Birincisi, \textbf{sis düğümü hesabı daha hızlı
+yapmaktadır} (3{,}372\ms'ye karşı 6{,}344\ms): ortak yerleşimde istemci ve
+sunucu aynı işlemciyi paylaşmakta ve birbirlerini yavaşlatmaktadır. İkincisi,
+bu kazanç ağ tarafında geri verilmektedir; yanıt süresi medyanı sis lehine
+değil, aleyhine çıkmaktadır (10{,}151'e karşı 7{,}880\ms). Üçüncüsü, Wi-Fi'ın
+kuyruk davranışı p95'te dramatiktir: yanıt süresi p95'i 74\ms'ye, seğirme
+22{,}6\ms'ye çıkmaktadır ve koşu arası yayılım \%112'ye ulaşmaktadır. Bant
+genişliği her iki yerleşimde aynıdır, beklendiği gibi.
+
+\subsection{Açıklayıcı hiperparametre taraması}
+\label{sec:xai-tarama}
+
+Tarama, sunucunun gördüğü girdi uzayında (nedensel normalizasyon) ve GPU
+üzerinde koşulmuştur. \textbf{Kalite ölçütleri donanımdan bağımsızdır ve bu
+tablolardan alınır; süre değerleri GPU'ya aittir} ve nihai süre tablosu
+Bölüm~\ref{sec:fog-xai}'den gelir. Bu ayrım kritiktir: aynı yapılandırmanın CPU
+süresi bir mertebe daha büyüktür.
+
+Taramada tek faktör değiştirme (OFAT) yaklaşımı kullanılmış, her aşamanın
+kazananı bir sonraki aşamanın varsayılanı olmuştur. Kalite, 40 pencere üzerinde;
+duyarlılık, maliyeti nedeniyle 10 pencere $\times$ 3 deneme üzerinde
+hesaplanmıştır.
+
+\begin{table}[t]
+\caption{LIME tarama sonuçları (nedensel uzay, GPU, 40 pencere)}
+\label{tab:lime-sweep}
+\centering
+\scriptsize
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Yapılandırma} & \textbf{ort.} & \textbf{p95} & \textbf{Sadakat} & \textbf{Mono.} & \textbf{Duyarl.} & \textbf{RSS}\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 1 --- örnek sayısı (10 dilim, kw 0{,}25)}}\\
+250 örnek   & 105{,}3 & 211{,}4 & 0{,}2219 & 0{,}5925 & 0{,}0274 & 1186\\
+500 örnek   & 104{,}3 & 162{,}8 & 0{,}2302 & 0{,}6025 & 0{,}0266 & 1203\\
+1000 örnek  & 245{,}6 & 376{,}3 & \textbf{0{,}2333} & 0{,}5938 & 0{,}0264 & 1204\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 2 --- bölge sayısı (500 örnek, kw 0{,}25)}}\\
+5 dilim     & \textbf{67{,}5} & \textbf{71{,}9} & 0{,}2180 & \textbf{0{,}6175} & \textbf{0{,}0217} & 1205\\
+10 dilim    & 151{,}1 & 268{,}1 & 0{,}2302 & 0{,}6025 & 0{,}0266 & 1205\\
+20 dilim    & 172{,}9 & 353{,}4 & 0{,}2375 & 0{,}5862 & 0{,}0357 & 1206\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 3 --- çekirdek genişliği (500 örnek, 20 dilim)}}\\
+kw 0{,}125  & 104{,}8 & 159{,}4 & 0{,}1887 & \textbf{0{,}6700} & \textbf{0{,}0147} & 1206\\
+kw 0{,}25   & 181{,}1 & 358{,}0 & 0{,}2375 & 0{,}5862 & 0{,}0357 & 1206\\
+kw 0{,}50   & 152{,}8 & 344{,}5 & \textbf{0{,}2390} & 0{,}5813 & 0{,}0365 & 1206\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Süreler ms, RSS MB. Kendi-kararsızlığı bütün LIME
+yapılandırmalarında tam olarak 0{,}0'dır: maske tohumu sabit olduğu için yöntem
+deterministiktir ve ölçülen duyarlılık yalnızca girdi gürültüsünden gelir.
+\end{table}
+
+\begin{table}[t]
+\caption{SHAP tarama sonuçları (nedensel uzay, GPU, 40 pencere,
+GradientExplainer)}
+\label{tab:shap-sweep}
+\centering
+\scriptsize
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Yapılandırma} & \textbf{ort.} & \textbf{p95} & \textbf{Sadakat} & \textbf{Mono.} & \textbf{Duyarl.} & \textbf{RSS}\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 1 --- arka plan boyutu ($n{=}200$, rastgele)}}\\
+10   & 192{,}3 & 232{,}7 & 0{,}2038 & \textbf{0{,}6263} & \textbf{0{,}1119} & 1407\\
+50   & 207{,}1 & 247{,}7 & 0{,}2212 & 0{,}6150 & 0{,}1003 & 1409\\
+100  & 204{,}4 & 252{,}8 & 0{,}2243 & 0{,}5938 & 0{,}1011 & 1411\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 2 --- örnek sayısı (arka plan 100, rastgele)}}\\
+50   & \textbf{46{,}5} & \textbf{54{,}9} & 0{,}2214 & 0{,}5950 & 0{,}1083 & 1413\\
+200  & 204{,}9 & 249{,}4 & 0{,}2243 & 0{,}5938 & 0{,}1011 & 1416\\
+400  & 402{,}2 & 487{,}7 & \textbf{0{,}2246} & 0{,}6025 & 0{,}1032 & 1468\\
+\midrule
+\multicolumn{7}{l}{\emph{Aşama 3 --- arka plan seçimi (100, $n{=}200$)}}\\
+rastgele    & 198{,}4 & 234{,}7 & 0{,}2243 & 0{,}5938 & 0{,}1011 & 1413\\
+k-ortalama  & 199{,}3 & 240{,}5 & \textbf{0{,}2302} & 0{,}5625 & 0{,}1184 & 1406\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Süreler ms, RSS MB. Kendi-kararsızlığı $\approx 10^{-8}$
+mertebesindedir; tohum sabitlemesi sayesinde yöntem pratikte deterministiktir.
+\end{table}
+
+Şekil~\ref{fig:pareto} bu iki tabloyu kalite--gecikme düzleminde birleştirir.
+Üç bulgu öne çıkmaktadır:
+
+\begin{enumerate}
+\item \textbf{Kalite doyuma erken ulaşmaktadır.} LIME'da örnek sayısını 250'den
+1000'e çıkarmak sadakati yalnızca \%5{,}1 artırırken gecikmeyi 2{,}3 katına
+çıkarmaktadır. SHAP'ta örnek sayısını 50'den 400'e çıkarmak sadakati \%1{,}4
+artırırken gecikmeyi 8{,}6 katına çıkarmaktadır. \emph{Pareto cephesi
+dikleşmektedir}: ucuz çalışma noktaları neredeyse bedavadır.
+\item \textbf{İki yöntemin kararlılığı aynı mertebede değildir.} LIME'ın
+duyarlılığı 0{,}015--0{,}036, SHAP'ınki 0{,}100--0{,}118 aralığındadır; yani
+girdiye eklenen küçük gürültüye karşı LIME bu kurulumda üç ilâ yedi kat daha
+kararlıdır. Bu, bitirme projesindeki çevrimdışı sıralamanın tersidir ve
+nedenlerinden biri bölge tabanlı LIME'ın sabit tohumla deterministik hale
+getirilmiş olmasıdır.
+\item \textbf{Bellek ayak izi yöntem seçimine bağlıdır.} SHAP, arka plan
+kümesini bellekte tuttuğu için LIME'dan yaklaşık 200\,MB fazla yer kaplamaktadır
+(1406--1468\,MB'ye karşı 1186--1206\,MB, tarama ortamında).
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\columnwidth, height=5.6cm,
+  xlabel={Açıklama süresi, ortalama (ms)},
+  ylabel={Sadakat},
+  xmin=0, xmax=430, ymin=0.18, ymax=0.245,
+  grid=both, grid style={gray!20},
+  legend pos=south east, legend style={font=\scriptsize,draw=gray!50},
+  label style={font=\scriptsize}, tick label style={font=\scriptsize},
+  scaled y ticks=false, y tick label style={/pgf/number format/fixed,
+    /pgf/number format/precision=3}
+]
+\addplot[only marks,mark=*,mark size=1.7pt,color=blue!70!black] coordinates {
+ (105.3,0.2219) (104.3,0.2302) (245.6,0.2333)
+ (67.5,0.2180) (151.1,0.2302) (172.9,0.2375)
+ (104.8,0.1887) (181.1,0.2375) (152.8,0.2390)
+};
+\addlegendentry{LIME}
+\addplot[only marks,mark=square*,mark size=1.7pt,color=red!70!black] coordinates {
+ (192.3,0.2038) (207.1,0.2212) (204.4,0.2243)
+ (46.5,0.2214) (204.9,0.2243) (402.2,0.2246)
+ (198.4,0.2243) (199.3,0.2302)
+};
+\addlegendentry{SHAP}
+\end{axis}
+\end{tikzpicture}
+\caption{Açıklama kalitesine karşı açıklama süresi (GPU, nedensel uzay). Sol üst
+köşe tercih edilir. Her iki yöntemde de kalite dar bir bantta toplanırken süre
+bir mertebe değişmektedir.}
+\label{fig:pareto}
+\end{figure}
+
+\textbf{Metodolojik bir karşı örnek.} Tarama önce sızıntılı (denek bazlı)
+normalizasyon uzayında koşulmuş, sonra nedensel uzayda tekrarlanmıştır. İki
+ölçüm yan yana konduğunda sızıntılı ölçümün XAI'yi olduğundan iyi gösterdiği
+görülmektedir: LIME'ın sadakati 0{,}2476'dan 0{,}2333'e düşmekte, duyarlılığı
+0{,}0174'ten 0{,}0264'e çıkmaktadır. Yani açıklayıcıyı, dağıtımda hiç
+görmeyeceği bir girdi dağılımı üzerinde değerlendirmek iyimser bir kalite
+tahmini üretir. Bu, XAI değerlendirmesinin sunucunun gerçekten gördüğü girdi
+uzayında yapılması gerektiğinin doğrudan kanıtıdır.
+
+Bu taramaya dayanarak dört çalışma noktası dondurulmuş ve sunucuya gömülmüştür
+(Tablo~\ref{tab:secilen}). İki maliyet noktası kasıtlıdır: seçici açıklamanın
+kazancı, açıklama pahalılaştıkça büyür.
+
+\begin{table}[t]
+\caption{Sunucuya gömülen açıklayıcı yapılandırmaları}
+\label{tab:secilen}
+\centering
+\small
+\begin{tabular}{llp{3.2cm}}
+\toprule
+\textbf{Ad} & \textbf{Yöntem} & \textbf{Yapılandırma}\\
+\midrule
+\texttt{lime}      & LIME & 500 örnek, 20 dilim, kw 0{,}5\\
+\texttt{lime\_ucuz}& LIME & 250 örnek, 20 dilim, kw 0{,}5\\
+\texttt{shap}      & SHAP & arka plan 100 (k-ortalama), $n{=}200$\\
+\texttt{shap\_ucuz}& SHAP & arka plan 100 (k-ortalama), $n{=}50$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sis düğümünde uçtan uca açıklama maliyeti}
+\label{sec:fog-xai}
+
+Bu, raporun ana sonucudur. Beş durum aynı koşullarda (S11, tek istemci, 600 tik,
+Wi-Fi, 44 ölçülen pencere, saat farkı 60 saniyede bir yeniden ölçülerek) uçtan
+uca koşulmuştur.
+
+\begin{table*}[t]
+\caption{Sis düğümünde beş XAI durumunun uçtan uca ölçümü (S11, tek istemci,
+600 tik, Wi-Fi, 44 ölçülen pencere, her koşu $\approx$5 dakika)}
+\label{tab:fog-xai}
+\centering
+\small
+\begin{tabular}{lrrrrrrrr}
+\toprule
+\textbf{Açıklayıcı} & \textbf{Yanıt} & \textbf{Yanıt} & \textbf{Çalışma} & \textbf{Açıklama} & \textbf{Açıklama} & \textbf{Gecikme} & \textbf{Sunucu} & \textbf{Sunucu}\\
+ & \textbf{medyan} & \textbf{p95} & \textbf{medyan} & \textbf{medyan} & \textbf{p95} & \textbf{medyan} & \textbf{CPU} & \textbf{RSS tepe}\\
+\midrule
+Yok                          & \textbf{10{,}6}   & 42{,}2    & 3{,}5     & ---       & ---       & 4{,}5 & \%0{,}0  & 210{,}4\\
+SHAP ($n{=}50$)              & 442{,}6           & 574{,}0   & 394{,}1   & 390{,}4   & 460{,}5   & 4{,}3 & \%5{,}0  & 422{,}3\\
+LIME (250 örnek)             & 645{,}2           & 802{,}5   & 588{,}1   & 584{,}0   & 650{,}6   & 5{,}3 & \%10{,}8 & 442{,}4\\
+LIME (500 örnek)             & 1227{,}5          & 1407{,}1  & 1158{,}1  & 1154{,}2  & 1295{,}9  & 5{,}0 & \%22{,}8 & 449{,}2\\
+SHAP ($n{=}200$)             & \textbf{1456{,}2} & 1548{,}5  & 1431{,}1  & 1426{,}2  & 1465{,}0  & 4{,}5 & \%25{,}9 & 464{,}5\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Süreler milisaniye, RSS megabayttır. CPU değeri sunucu sürecinin
+koşu boyunca ortalamasıdır. Bant genişliği beş durumda da 186{,}7--187{,}2\,kbps
+aralığındadır. Kuyruk gecikmesi medyanı 0{,}029--0{,}030\ms'dir.
+\end{table*}
+
+Tablo~\ref{tab:fog-xai} ve Şekil~\ref{fig:fogbar} üç sonuç vermektedir:
+
+\begin{enumerate}
+\item \textbf{Açıklama, sistemin baskın maliyetidir.} Açıklayıcı kapalıyken
+yanıt süresi medyanı 10{,}6\ms'dir; en pahalı yapılandırmada 1456{,}2\ms,
+yani \textbf{137 kat}. Sunucu içi aşama dökümünde açıklama, çalışma süresinin
+\%99{,}6'sını oluşturmaktadır (1426{,}2 / 1431{,}1\ms). Çıkarımın kendisi hâlâ
+2--3{,}4\ms'dir; yani modelin maliyeti açıklamanın yanında ölçüm gürültüsü
+mertebesindedir.
+
+\item \textbf{Ucuz çalışma noktaları gerçek zamanlılık sınırının altındadır.}
+ShaTS'in \cite{shats2025} koyduğu 1\,s/pencere sınırına göre SHAP ($n{=}50$,
+442{,}6\ms) ve LIME (250 örnek, 645{,}2\ms) uygundur; pahalı yapılandırmalar
+medyanda ve p95'te bu sınırı aşmaktadır. Beş saniyelik güncelleme aralığı
+bütçesine göre bakıldığında ucuz noktalar bütçenin \%9--13'ünü, pahalı noktalar
+\%25--29'unu tüketmektedir --- tek kullanıcıda. Dört kullanıcıda pahalı
+yapılandırma bütçeyi aşacaktır; seçici açıklamanın gerekçesi tam buradadır.
+
+\item \textbf{Bellek, kısıtlı donanımda bağlayıcı olabilir.} RSS tepe değeri
+210\,MB'den 464\,MB'ye çıkmaktadır. 2\,GB bellekli bir Raspberry Pi'de bu
+sıkışacaktır; en az 4\,GB gerekmektedir. Artışın kaynağı ikilidir: SHAP'ta
+bellekte tutulan arka plan kümesi, LIME'da yüzlerce perturbasyonun tek partide
+oluşturulması.
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\columnwidth, height=5.2cm,
+  ybar, bar width=12pt,
+  ylabel={Yanıt süresi medyanı (ms)},
+  symbolic x coords={Yok,SHAP-50,LIME-250,LIME-500,SHAP-200},
+  xtick=data, x tick label style={font=\scriptsize,rotate=20,anchor=north east},
+  ymin=0, ymax=1700,
+  nodes near coords, nodes near coords style={font=\scriptsize},
+  label style={font=\scriptsize}, tick label style={font=\scriptsize},
+  grid=major, grid style={gray!20},
+  enlarge x limits=0.13
+]
+\addplot[fill=blue!35,draw=blue!60!black] coordinates {
+ (Yok,10.6) (SHAP-50,442.6) (LIME-250,645.2) (LIME-500,1227.5) (SHAP-200,1456.2)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Sis düğümünde yanıt süresi medyanı. Açıklayıcı kapalıyken 10{,}6\ms
+olan yanıt, en pahalı yapılandırmada 137 katına çıkmaktadır.}
+\label{fig:fogbar}
+\end{figure}
+
+\textbf{Tutarlılık denetimi.} Gecikme beş koşuda da 4{,}3--5{,}3\ms bandında
+kalmaktadır; yani açıklayıcı seçimi ağ metriklerini etkilememektedir. Bu
+beklenen davranıştır ve ölçümün kendi içinde tutarlı olduğunun göstergesidir:
+açıklayıcı sunucu tarafında çalıştığı için taşıma katmanına dokunmaz.
+
+\textbf{Kayıt boşluğu ve düzeltmesi.} Bu koşular alındığında hangi açıklayıcının
+kullanıldığı yalnızca dosya adında saklanıyordu; sunucu bu bilgiyi istemciye
+göndermiyordu. Bu, sonuçların yeniden üretilebilirliği açısından bir eksikti ve
+sonradan giderilmiştir: sunucu artık kapanış istatistiklerinde yöntem adını,
+eşiği, açıklayıcı yapılandırmasını ve ısınma süresini de göndermektedir.
+
+\subsection{Sınıflandırma başarımının ölçüm yolundan bağımsızlığı}
+
+Tablo~\ref{tab:siniflama}, aynı modelin farklı ölçüm yollarındaki sınıflandırma
+sonucunu toplar. İki gözlem önemlidir.
+
+\begin{table}[t]
+\caption{Sınıflandırma başarımı, ölçüm yoluna göre}
+\label{tab:siniflama}
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Koşul} & \textbf{Doğruluk} & \textbf{Stres F1} & \textbf{Pencere}\\
+\midrule
+Çevrimdışı, denek bazlı & 0{,}9361 & --- & ---\\
+Tek süreç, \texttt{running}    & 0{,}8222 & 0{,}6944 & 1198\\
+İstemci--sunucu, \texttt{running} & 0{,}8222 & 0{,}6944 & 1198\\
+Tek süreç, \texttt{fixed}$^{\dagger}$ & 0{,}6996 & 0{,}4676 & 1175\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize $^{\dagger}$ Bu satır, yeniden örneklemenin ölçüm dışında
+bırakıldığı ve geçersiz etiketli pencerelerin atlandığı önceki
+(\texttt{prepared}) ardışık düzen döneminden gelmektedir; \texttt{native} yolda
+\texttt{fixed} normalizasyonla bir koşu henüz yapılmamıştır. Diğer satırlarla
+birebir karşılaştırılmamalı, yalnızca kişiselleştirme etkisinin mertebesi
+olarak okunmalıdır.
+\end{table}
+
+Birincisi, \textbf{ağ katmanı hesabı bozmamaktadır}: tek süreçli ve
+istemci--sunucu yolları birebir aynı karışıklık matrisini vermektedir.
+
+İkincisi, \textbf{düşüş modelin değil normalizasyon kısıtının sonucudur}.
+Çevrimdışı 0{,}9361 değeri, deneğin tüm kaydının istatistiğiyle, yani geleceğe
+sızarak elde edilmiştir. Nedensel normalizasyonla 0{,}8222'ye, deneğe hiç
+uyarlanmayan sabit istatistikle 0{,}6996'ya düşmektedir. Aradaki 12 puanlık fark,
+kişiselleştirmenin gerçek zamanlı bir sistemde ne kadar değer taşıdığının
+doğrudan ölçüsüdür.
+
+\subsection{Mikrodenetleyici fizibilitesi}
+
+Açıklama maliyeti sunucuda ölçüldükten sonra doğal bir soru kalmaktadır: çıkarım
+giyilebilir cihazın içinde yapılabilir mi? Yapılabilirse uç ile sis arasında
+seçim yapma sorunu ortadan kalkar. Bu, donanım olmadan katman katman parametre,
+aktivasyon belleği, tepe RAM ihtiyacı ve çarpma-toplama (MAC) sayısı
+hesaplanarak analiz edilmiştir.
+
+\begin{table}[t]
+\caption{Mikrodenetleyici gereksinimleri (10\,s pencere, 49\,890 parametre,
+pencere başına 14{,}50 milyon MAC)}
+\label{tab:mcu}
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Veri tipi} & \textbf{Ağırlık (Flash)} & \textbf{Tepe RAM} & \textbf{Giriş tamponu}\\
+\midrule
+float32 & 194{,}9\,KB & 320{,}0\,KB & 35{,}0\,KB\\
+float16 & 97{,}4\,KB  & 160{,}0\,KB & 17{,}5\,KB\\
+int8    & 48{,}7\,KB  & 80{,}0\,KB  & 8{,}8\,KB\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+\footnotesize Tepe aktivasyon ikinci evrişim bloğunun BatchNorm katmanındadır
+(81\,920 eleman): 128 kanal $\times$ 320 uzunluk.
+\end{table}
+
+Sonuç nettir: \textbf{darboğaz hız değil bellektir}. Pencere başına 14{,}50
+milyon MAC gerekirken bütçe 5000\ms'dir (güncelleme aralığı). En yavaş senaryo
+olan Cortex-M4 @168\,MHz float32'de tahmini süre 287{,}7\ms, yani bütçenin
+\%5{,}8'idir; Cortex-M7 @480\,MHz int8'de 12{,}1\ms, yani \%0{,}2'dir. Buna
+karşılık float32 ağırlıklar yalnızca STM32H743 ve U575 sınıfı cihazlara,
+int8 ağırlıklar ise F407 ve üzerine sığmaktadır; F103 sınıfı hiçbir biçimde
+yetmemektedir.
+
+Bu analiz kâğıt üstündedir. Cihaza indirmek için ONNX aktarımı, STM32Cube.AI ya
+da TensorFlow Lite Micro ile kod üretimi, int8 nicemleme ve doğruluk kaybı
+ölçümü, ön işlemenin (700\,Hz'den 64\,Hz'e indirgeme ve nedensel z-skor) porte
+edilmesi ve cihaz üstü zaman ölçümü gerekmektedir.
+
+%=======================================================================
+\section{Tartışma}
+%=======================================================================
+
+\textbf{Açıklama maliyeti, model maliyetinin iki mertebe üzerindedir.} Bu,
+raporun en net bulgusudur. 49\,890 parametreli bir modelin çıkarımı 2--3\ms
+sürerken, aynı pencerenin açıklanması 390--1426\ms sürmektedir. Literatürdeki
+``gerçek zamanlı kullanıma uygundur'' iddialarının büyük çoğunluğu yalnızca
+çıkarım süresine bakmaktadır; açıklama katmanı eklendiğinde bu iddialar test
+edilmemiş varsayımlara dönüşmektedir.
+
+\textbf{Kalite doyuma erken ulaşmakta, maliyet ulaşmamaktadır.} Tarama
+tablolarında sadakat değerleri 0{,}19--0{,}24 gibi dar bir banttayken süre
+46{,}5\ms ile 402{,}2\ms arasında değişmektedir. Bu asimetri, ucuz çalışma
+noktalarının pratikte neredeyse bedava olduğu anlamına gelir ve hiperparametre
+taramasının \emph{süreyle birlikte} yapılmasının niçin gerektiğini gösterir.
+Yalnızca kaliteye bakan otomatik bir seçim, bu taramada her aşamada en pahalı
+yapılandırmayı seçerdi; bu nedenle nihai seçim, kalite--gecikme tablosuna
+bakılarak elle yapılmıştır.
+
+\textbf{Çevrimdışı sıralama gerçek zamanda korunmayabilir.} Bitirme projesinde
+SHAP en kararlı yöntemdi (duyarlılık 0{,}0038'e karşı LIME 0{,}0116). Bu
+kurulumda, nedensel uzayda ve bölge tabanlı LIME ile sıralama tersine dönmüştür
+(LIME 0{,}015--0{,}036, SHAP 0{,}100--0{,}118). İki ölçüm farklı modeller,
+farklı girdi uzayları ve farklı LIME uygulamaları üzerinde yapıldığı için
+doğrudan karşılaştırılamaz; ancak bulgu, ``çevrimdışı en iyi olan yöntemin
+gerçek zamanda da en iyi olacağı'' varsayımının sınanması gerektiğini
+göstermektedir.
+
+\textbf{Yerleşim kararı tek bir metrikle verilemez.} Sis düğümü hesabı daha hızlı
+yapmakta (3{,}4'e karşı 6{,}3\ms) ama Wi-Fi gecikmesi ve seğirmesi bu kazancı
+geri almaktadır. Aynı zamanda ham sinyali sunucuya göndermek, indirgenmiş
+sinyale göre 6{,}4 kat bant genişliği maliyeti getirmektedir. Karar, hangi
+metriğin uygulamada bağlayıcı olduğuna bağlıdır.
+
+\textbf{Ölçüm altyapısının kendisi bir katkıdır.} Bu çalışmada üç ayrı ölçüm
+hatası yakalanmış ve düzeltilmiştir: (i) 15{,}6\ms çözünürlüklü saatin gecikmeyi
+sıfır okuması, (ii) kuyruğun olmaması nedeniyle kuyruk gecikmesinin gecikme
+içinde gizlenmesi, (iii) etiketi geçersiz pencerelerin atlanması nedeniyle
+normalizasyon istatistiğinin güncellenmemesi. Üçü de sessiz hatalardı; sonuçlar
+makul görünüyor ama yanlıştı. Gerçek zamanlı ölçüm yapan çalışmaların bu tür
+denetimleri açıkça raporlaması gerektiğini düşünüyoruz.
+
+%=======================================================================
+\section{Sınırlılıklar}
+%=======================================================================
+
+\begin{enumerate}
+\item \textbf{Emülasyon, canlı sistem değil.} Sinyal gerçek sensörden değil,
+WESAD kaydından gerçek hızda yeniden oynatılmaktadır. Referans çalışma
+\cite{erzurumluoglu2025} da DREAMER'ı aynı biçimde akıtmıştır; yöntemin
+savunulabilirliği buna dayanır.
+
+\item \textbf{Sis düğümü kaynak kısıtlı değildir.} İkinci makine 12 çekirdekli
+bir masaüstü sınıfı işlemcidir. Ölçülen şey \emph{dağıtık yerleşim}dir,
+\emph{kaynak kısıtlı sis düğümü} değil. Kısıtlı mod (tek çekirdeğe kilitleme +
+tek iplik) altyapıda hazırdır ancak bu rapordaki sayılar kısıtsız modda
+alınmıştır.
+
+\item \textbf{İki tutulmuş denek.} S11 ve S14 dışındaki denekler modelin
+eğitiminde kullanılmıştır. Eşik ve kalibrasyon çalışmaları için çapraz denek
+protokolü (S11'de kalibre et, S14'te ölç ve tersi) tasarlanmış fakat henüz
+koşulmamıştır.
+
+\item \textbf{Sis koşularındaki sınıflandırma sayıları anlamlı değildir.}
+Tablo~\ref{tab:fog-xai}'deki koşular S11'in ilk beş dakikasını kapsamaktadır ve
+bu aralıkta stres etiketi hiç bulunmamaktadır (42 etiketli pencerenin tamamı
+stres dışı). Bu koşuların amacı zamanlama ölçümüdür; sınıflandırma başarımı
+Tablo~\ref{tab:siniflama}'den okunmalıdır.
+
+\item \textbf{Bulut ayağı yoktur.} Uç--sis karşılaştırması yapılmış, bulut
+yerleşimi bütçe nedeniyle atlanmıştır. Altyapı bunu tek bir adres parametresiyle
+desteklemektedir.
+
+\item \textbf{Wi-Fi'da gecikme belirsizliği yüksektir.} Tek yönlü gecikmenin hata
+payı $\pm1$--$10$\ms'dir ve ölçülen değerle aynı mertebeye çıkabilir. Çalışma
+süresi, kuyruk gecikmesi, yanıt süresi ve seğirme bundan etkilenmez; gecikme
+sütunu dikkatle okunmalıdır. Ethernet üzerinde tekrar yapılmamıştır.
+
+\item \textbf{Referans çalışmanın birincil kaynağı doğrulanamamıştır.}
+\cite{erzurumluoglu2025}'in erişilebilir bir kaydı bulunamamıştır; bu çalışmayla
+yapılan metrik karşılaştırması, künye ve sayılar birincil kaynaktan
+doğrulanmadan nihai metne alınmamalıdır.
+
+\item \textbf{Tek model.} Açıklama maliyeti yalnızca TemporalCNN üzerinde
+ölçülmüştür. TranSensFusers gibi daha büyük modellerde hem çıkarım hem de
+gradyan tabanlı açıklama maliyeti artacaktır; oran değişebilir.
+\end{enumerate}
+
+%=======================================================================
+\section{Devam Eden İşler}
+\label{sec:devam}
+%=======================================================================
+
+Seçici açıklama mekanizması sunucuya entegre edilmiş, çalıştığı doğrulanmış ve
+iki uç durumu ölçülmüştür. Aşağıdaki adımlar planlanmış fakat henüz
+tamamlanmamıştır:
+
+\begin{enumerate}
+\item \textbf{Güven kalibrasyonu.} Güvenilirlik diyagramı ve beklenen
+kalibrasyon hatası (ECE); gerekirse tek parametreli sıcaklık ölçekleme.
+Kalibrasyon, kalibrasyon deneğinde öğrenilip test deneğinde uygulanacaktır.
+
+\item \textbf{Eşik taraması.} $\tau \in \{0{,}60,\ 0{,}70,\ 0{,}80,\ 0{,}90\}$
+için: açıklanan pencere yüzdesi, yakalanan hata yüzdesi (yanlış sınıflanan
+pencerelerin kaçında açıklama tetiklendi), pencere başına ortalama hesap, p95
+gecikme, CPU ve RSS. Bu, ``belirli bir açıklama kapsamında hataların ne kadarı
+açıklandı'' çalışma eğrisini verecektir.
+
+\item \textbf{Çok istemcili yük.} 1, 2 ve 4 istemciyle kuyruk gecikmesi p95'inin
+büyümesi. Seçici açıklamanın kazancının asıl görüneceği yer burasıdır: dört
+kullanıcı $\times$ 400\ms, beş saniyelik bütçenin üçte birini tüketmektedir.
+
+\item \textbf{Düşük güvenli pencerelerde açıklama kararsızlığı.} En güçlü
+itiraza cevap: post-hoc açıklamalar karar sınırına yakın oynaktır ve kapı tam
+orada tetiklenmektedir. Duyarlılık ölçütü yalnızca düşük güvenli pencerelerde
+ayrıca hesaplanacaktır.
+
+\item \textbf{Model karmaşıklığı ablasyonu.} Mevcut OFAT taramasından derinlik,
+filtre ve çekirdek varyantlarının F1--gecikme Pareto eğrisi.
+\end{enumerate}
+
+%=======================================================================
+\section{Sonuç}
+%=======================================================================
+
+Bu rapor, çevrimdışı olarak seçilmiş bir fizyolojik stres sınıflandırıcısını
+gerçek zamanlı bir istemci--sunucu sistemine yerleştirmiş ve açıklanabilirliğin
+hesaplama maliyetini, taşıma katmanı metrikleriyle aynı bütçede ölçmüştür.
+
+Ana bulgu, açıklama maliyetinin model maliyetini iki mertebe aşmasıdır: ayrı bir
+makinede, Wi-Fi üzerinden ölçülen yanıt süresi medyanı açıklayıcı kapalıyken
+10{,}6\ms, en pahalı yapılandırmada 1456{,}2\ms'dir. Sunucu bellek ayak izi
+210\,MB'den 464\,MB'ye çıkmaktadır. Hiperparametre taraması, açıklama kalitesinin
+dar bir bantta doyuma ulaştığını fakat sürenin bir mertebe değiştiğini
+göstermiştir; bu asimetri, ucuz çalışma noktalarının (SHAP 442{,}6\ms, LIME
+645{,}2\ms) literatürdeki bir saniyelik gerçek zamanlılık sınırının altında
+kalmasını sağlamaktadır.
+
+Bu sayılar, güven eşikli seçici açıklamanın niçin gerekli olduğunu niceliksel
+olarak ortaya koymaktadır: tek kullanıcıda bile pahalı bir açıklayıcı güncelleme
+aralığı bütçesinin dörtte birini tüketmekte, çok kullanıcılı ya da kaynak
+kısıtlı senaryolarda ise bütçeyi aşmaktadır. Mekanizma sisteme entegre edilmiş ve
+uç durumları ölçülmüştür; eşik taraması ve kalibrasyon çalışmaları devam
+etmektedir.
+
+%=======================================================================
+\begin{thebibliography}{99}
+\small
+
+\bibitem{schmidt2018}
+P. Schmidt, A. Reiss, R. Duerichen, C. Marberger ve K. Van Laerhoven,
+``Introducing WESAD, a multimodal dataset for wearable stress and affect
+detection,'' \emph{Proc. 20th ACM Int. Conf. Multimodal Interaction}, 2018,
+ss. 400--408.
+
+\bibitem{kasnesis2025}
+P. Kasnesis, C. Chatzigeorgiou, M. Feidakis, A. Gutierrez ve C. Z. Patrikakis,
+``TranSenseFusers: A temporal CNN-transformer neural network family for
+explainable PPG-based stress detection,'' \emph{Biomedical Signal Processing
+and Control}, c. 102, s. 107248, 2025.
+
+\bibitem{ribeiro2016}
+M. T. Ribeiro, S. Singh ve C. Guestrin, ```Why should I trust you?' Explaining
+the predictions of any classifier,'' \emph{Proc. 22nd ACM SIGKDD}, 2016,
+ss. 1135--1144.
+
+\bibitem{lundberg2017}
+S. M. Lundberg ve S.-I. Lee, ``A unified approach to interpreting model
+predictions,'' \emph{Advances in Neural Information Processing Systems}, c. 30,
+2017.
+
+\bibitem{sundararajan2017}
+M. Sundararajan, A. Taly ve Q. Yan, ``Axiomatic attribution for deep networks,''
+\emph{Proc. Int. Conf. Machine Learning (ICML)}, 2017, ss. 3319--3328.
+
+\bibitem{lin2017}
+T.-Y. Lin, P. Goyal, R. Girshick, K. He ve P. Dollár, ``Focal loss for dense
+object detection,'' \emph{Proc. IEEE ICCV}, 2017, ss. 2980--2988.
+
+\bibitem{nauta2023}
+M. Nauta \emph{ve ark.}, ``From anecdotal evidence to quantitative evaluation
+methods: A systematic review on evaluating explainable AI,'' \emph{ACM Computing
+Surveys}, c. 55, sy. 13s, 2023.
+
+\bibitem{shats2025}
+M. Franco de la Peña \emph{ve ark.}, ``ShaTS: A Shapley-based method for
+time-series explainability in industrial IoT,'' arXiv:2506.01450, 2025.
+
+\bibitem{erzurumluoglu2025}
+E. Erzurumluoğlu \emph{ve ark.}, ``Emotion recognition on a fog computing
+architecture,'' \emph{Proc. Int. Conf. Advanced Communication Technology
+(ICACT)}, 2025.
+
+\bibitem{basaran2025}
+M. Basaran ve F. Dressler, ``XAI-on-RAN: Explainability overhead in live O-RAN
+control loops,'' arXiv:2511.17514, 2025.
+
+\bibitem{taguta2026}
+T. Taguta \emph{ve ark.}, ``Conditional SHAP for on-device cold-chain
+monitoring: A 24-day field deployment,'' arXiv:2609.14036, 2026.
+
+\bibitem{das2021}
+D. Das \emph{ve ark.}, ``Explainable activity recognition from wearable
+sensors,'' \emph{ACM Trans. Interactive Intelligent Systems}, 2021;
+arXiv:2105.09787.
+
+\bibitem{warnecke2020}
+A. Warnecke, D. Arp, C. Wressnegger ve K. Rieck, ``Evaluating explanation
+methods for deep learning in security,'' \emph{Proc. IEEE European Symp. on
+Security and Privacy (EuroS\&P)}, 2020.
+
+\bibitem{jethani2022}
+N. Jethani, M. Sudarshan, I. Covert, S.-I. Lee ve R. Ranganath, ``FastSHAP:
+Real-time Shapley value estimation,'' \emph{Proc. Int. Conf. Learning
+Representations (ICLR)}, 2022.
+
+\bibitem{almadhor2025}
+A. Almadhor \emph{ve ark.}, ``Explainable deep learning for multimodal
+physiological stress and emotion recognition,'' \emph{Frontiers in
+Bioengineering and Biotechnology}, 2025.
+
+\bibitem{elrashidy2025}
+N. El Rashidy \emph{ve ark.}, ``An explainable fog-based emotion recognition
+framework,'' \emph{Frontiers in Computer Science}, c. 7, 2025.
+
+\bibitem{paes2024}
+L. M. Paes, D. Wei ve F. P. Calmon, ``Selective explanations,''
+arXiv:2405.19562, 2024.
+
+\bibitem{teerapittayanon2017}
+S. Teerapittayanon, B. McDanel ve H. T. Kung, ``BranchyNet: Fast inference via
+early exiting from deep neural networks,'' arXiv:1709.01686, 2017.
+
+\bibitem{berestizshevsky2018}
+K. Berestizshevsky ve G. Even, ``Dynamically sacrificing accuracy for reduced
+computation: Cascaded inference based on softmax confidence,''
+arXiv:1805.10982, 2018.
+
+\bibitem{artelt2023}
+A. Artelt, R. Visser ve B. Hammer, ``Model agnostic local explanations of reject,''
+\emph{Neurocomputing}, c. 558, 2023; arXiv:2205.07623.
+
+\bibitem{bitirme2026}
+S. Cindioğlu ve M. Eldemery, ``Explainable artificial intelligence for stress
+detection using physiological data,'' Bitirme Projesi, Yıldız Teknik
+Üniversitesi, Bilgisayar Mühendisliği Bölümü, Ocak 2026.
+
+\end{thebibliography}
+
+\end{document}
