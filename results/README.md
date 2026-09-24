@@ -204,6 +204,71 @@ kurulu.
 
 ---
 
+## 09_secici_xai — seçici açıklama (Faz D2 + D4 orta satır)
+
+Makalenin ana iddiasının kanıtı: güven eşiğinin altındaki pencereleri
+açıklamak, her pencereyi açıklamaya göre maliyeti kaça indiriyor?
+
+### `fog_sel80_tam.json` — **ana sonuç**
+
+S11'in **tam kaydı** (10 466 tick, 87 dakika), fog düğümü, `shap_ucuz`,
+eşik 0.80. **1030 ölçülen pencere** — diğer tüm fog koşularının 23 katı,
+p95 ve p99 burada gerçekten anlamlı.
+
+| durum | ort response | p95 | pencere |
+|---|---|---|---|
+| hiç açıklama (`04_fog/fog_xai_none`) | 15.9 ms | 42.2 ms | 44 |
+| **seçici (0.80)** | **80.1 ms** | 445.7 ms | **1030** |
+| hep açıkla (`04_fog/fog_xai_shapucuz`) | 450.5 ms | 574.0 ms | 44 |
+
+**Seçici açıklama, her pencereyi açıklamaya göre 5.6 kat ucuz**, ve D1'e
+göre hataların %89.7'si yakalanıyor. Açıklama oranı %14.1 (145/1030).
+
+**Uyarı:** üç satırın örneklem boyutu eşit değil (1030'a karşı 44).
+Karşılaştırma ortalamalar üzerinden geçerli ama p95/p99'da yalnızca seçici
+satır sağlam.
+
+### `selective_xai_sweep_d2.json` — projeksiyon, **ölçümle doğrulandı**
+
+D1'in açıklama oranını `04_fog`'un maliyetiyle birleştiren karışım modeli.
+Ana koşu bunu test etti:
+
+| | tahmin | ölçüm | hata |
+|---|---|---|---|
+| açıklama oranı | %14.4 | %14.1 | %2.3 |
+| ort response | 78.5 ms | 80.1 ms | %2.0 |
+| p95 response | 487.3 ms | 445.7 ms | %8.5 |
+
+Ortalamada %2: beklenen, çünkü karışımın ortalaması matematiksel olarak
+kesin. p95'te %8.5: özet çeyrekliklerden ara değerle tahmin edildiği için
+yaklaşık olduğu baştan işaretliydi.
+
+**Kuyrukta birikme YOK** (queuing ort 0.0, p99 0.1 ms). Patlamalı yükün
+(%86 pencere 3.6 ms, %14 pencere ~365 ms) kuyruğu bozması beklenebilirdi;
+bozmadı. Yani modelin kaçırabileceği etkileşim etkisi yok ve dosyadaki
+diğer satırlar (diğer açıklayıcılar, S14) güvenle projeksiyon olarak
+sunulabilir.
+
+### `kisa_segment_sel{60,80,90}.json` — eşiğin hiç tetiklenmediği koşular
+
+600 tick'lik (5 dk) koşular, **üçünde de açıklama oranı %0**.
+
+**Bu bir hata değil, kayıt içi durağansızlığın kanıtı.** S11'in ilk 5
+dakikasında en düşük güven **0.929**; en yüksek eşik (0.90) bile hiçbir
+pencerenin altına inmiyor. Düşük güvenli ilk pencere **#100**, yani
+kaydın 8. dakikasında. Kayıttaki 87 düşük güvenli pencerenin hepsi ilk
+400 pencere içinde; sonrası tekrar yüksek güvene dönüyor.
+
+Seçici XAI deneyi bu yüzden tam kayıt üzerinde koşuldu.
+
+**Dosya adları yanıltıcı:** `sel60` gerçekte eşik **0.70** ile koşuldu
+(sunucu künyesi öyle diyor). Etiket kayması koşu sırasında oldu. Gerçek
+eşikler künyede: `server.xai.threshold`. Eşik 0.60 hiç koşulmadı.
+Dosya adına değil künyeye bakın — künyenin kayda geçirilmesinin
+gerekçesi tam olarak budur.
+
+---
+
 ## eski_ve_hatali — makaleye girmez
 
 Ayrıntılı gerekçeler: [eski_ve_hatali/README.md](eski_ve_hatali/README.md).

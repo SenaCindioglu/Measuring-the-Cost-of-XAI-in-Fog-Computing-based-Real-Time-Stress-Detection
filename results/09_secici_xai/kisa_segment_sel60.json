@@ -1,0 +1,231 @@
+{
+ "clock_sync": {
+  "offset_ns": -435200995526850,
+  "rtt_ns": 2223300,
+  "uncertainty_ms": 1.11165,
+  "method": "periodik yeniden olcum + dogrusal ara deger",
+  "resync_every_s": 60.0,
+  "n_samples": 6,
+  "span_s": 300.0414614,
+  "rtt_min_ns": 1716900,
+  "rtt_max_ns": 2680400,
+  "drift_ns": -2533550,
+  "drift_ms": -2.53355,
+  "drift_ppm": -8.443999666507423,
+  "samples": [
+   {
+    "t_rel_s": 0.0,
+    "offset_ns": -435200995526850,
+    "rtt_ns": 1716900
+   },
+   {
+    "t_rel_s": 60.0180711,
+    "offset_ns": -435200996089800,
+    "rtt_ns": 1890400
+   },
+   {
+    "t_rel_s": 120.0331063,
+    "offset_ns": -435200996570750,
+    "rtt_ns": 2223300
+   },
+   {
+    "t_rel_s": 180.5195322,
+    "offset_ns": -435200996943700,
+    "rtt_ns": 2313600
+   },
+   {
+    "t_rel_s": 240.5237484,
+    "offset_ns": -435200997257850,
+    "rtt_ns": 1781900
+   },
+   {
+    "t_rel_s": 300.0414614,
+    "offset_ns": -435200998060400,
+    "rtt_ns": 2680400
+   }
+  ]
+ },
+ "server": {
+  "hardware": {
+   "platform": "Windows-11-10.0.22631-SP0",
+   "machine": "AMD64",
+   "processor": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+   "python": "3.14.7",
+   "torch": "2.14.0+cpu",
+   "cpu_count": 12,
+   "torch_threads": 1,
+   "total_ram_mb": 16235.3,
+   "cpu_mhz_max": 2592.0
+  },
+  "resources": {
+   "process_cpu_percent": {
+    "mean": 0.1019878223495702,
+    "max": 93.3,
+    "p95": 0.0,
+    "n_samples": 5584
+   },
+   "process_rss_mb": {
+    "mean": 383.03310099167265,
+    "max": 388.02734375
+   },
+   "system_cpu_percent": 3.3,
+   "system_memory_percent": 54.1,
+   "process_memory_percent": 2.39
+  },
+  "sessions_peak": 1,
+  "xai": {
+   "method": "shap_ucuz",
+   "threshold": 0.7,
+   "warmup_ms": 1251.328900048975,
+   "config": {
+    "method": "shap",
+    "nsamples": 50,
+    "background_size": 100,
+    "seed": 0
+   }
+  }
+ },
+ "n_packets": 600,
+ "n_predictions": 59,
+ "n_measured": 44,
+ "n_warmup_excluded": 15,
+ "wall_seconds": 300.05215110001154,
+ "metrics": {
+  "latency": {
+   "mean_ms": 12.778716823863636,
+   "median_ms": 4.1676762499999995,
+   "p95_ms": 61.034060300000014,
+   "p99_ms": 82.93326221625,
+   "min_ms": 1.84322925,
+   "max_ms": 84.392047375,
+   "std_ms": 21.029782281156763,
+   "jitter_mean_abs_delta_ms": 18.55166910755814
+  },
+  "queuing": {
+   "mean_ms": 0.03045681818181818,
+   "median_ms": 0.0294,
+   "p95_ms": 0.03167,
+   "p99_ms": 0.055673,
+   "min_ms": 0.0271,
+   "max_ms": 0.0595,
+   "std_ms": 0.005553311777148378,
+   "jitter_mean_abs_delta_ms": 0.0034139534883720927
+  },
+  "execution": {
+   "mean_ms": 3.843884090909091,
+   "median_ms": 3.58155,
+   "p95_ms": 4.941745000000001,
+   "p99_ms": 6.0054680000000005,
+   "min_ms": 3.2638,
+   "max_ms": 6.6472,
+   "std_ms": 0.6220245332574701,
+   "jitter_mean_abs_delta_ms": 0.5739744186046511
+  },
+  "response": {
+   "mean_ms": 23.29024090909091,
+   "median_ms": 9.642,
+   "p95_ms": 90.600455,
+   "p99_ms": 140.507673,
+   "min_ms": 6.9525,
+   "max_ms": 152.229,
+   "std_ms": 32.61226886770821,
+   "jitter_mean_abs_delta_ms": 28.227269767441854
+  }
+ },
+ "bandwidth": {
+  "bytes_sent": 6931800,
+  "bytes_recv": 88778,
+  "kbps_sent": 184.81587216322364,
+  "kbps_recv": 2.367001860830761,
+  "kbps_total": 187.18287402405443
+ },
+ "server_stages": {
+  "resampling": {
+   "mean_ms": 1.1009272711817175,
+   "median_ms": 1.0585499985609204,
+   "p95_ms": 1.2284899916267022,
+   "p99_ms": 1.6706739820074292,
+   "min_ms": 0.9739999659359455,
+   "max_ms": 1.992399978917092,
+   "std_ms": 0.15108512710077018,
+   "jitter_mean_abs_delta_ms": 0.10784650438053664
+  },
+  "preprocessing": {
+   "mean_ms": 0.17815226800104772,
+   "median_ms": 0.17439998919144273,
+   "p95_ms": 0.19767500925809148,
+   "p99_ms": 0.2899859973695129,
+   "min_ms": 0.15949999215081334,
+   "max_ms": 0.3372000064700842,
+   "std_ms": 0.026438983158920595,
+   "jitter_mean_abs_delta_ms": 0.016330229659932992
+  },
+  "tensor_prep": {
+   "mean_ms": 0.11305681916631082,
+   "median_ms": 0.11224998161196709,
+   "p95_ms": 0.11758501350414008,
+   "p99_ms": 0.15342998784035444,
+   "min_ms": 0.10499998461455107,
+   "max_ms": 0.16589998267591,
+   "std_ms": 0.00946078682421494,
+   "jitter_mean_abs_delta_ms": 0.007060462024149506
+  },
+  "inference": {
+   "mean_ms": 2.200154545293613,
+   "median_ms": 1.9648000015877187,
+   "p95_ms": 3.3352250058669606,
+   "p99_ms": 3.6015979951480404,
+   "min_ms": 1.7938000382855535,
+   "max_ms": 3.726899973116815,
+   "std_ms": 0.4710124323534656,
+   "jitter_mean_abs_delta_ms": 0.45238837036629054
+  },
+  "postprocessing": {
+   "mean_ms": 0.04796590656042099,
+   "median_ms": 0.04705000901594758,
+   "p95_ms": 0.059254985535517335,
+   "p99_ms": 0.0634199840715155,
+   "min_ms": 0.04339998122304678,
+   "max_ms": 0.0659999786876142,
+   "std_ms": 0.004491956423552833,
+   "jitter_mean_abs_delta_ms": 0.003527906766637813
+  }
+ },
+ "xai": {
+  "n_explained": 0,
+  "n_windows": 44,
+  "explain_rate": 0.0,
+  "mean_ms_per_window": 0.0,
+  "mean_ms_per_explanation": null
+ },
+ "classification": {
+  "n_labeled": 42,
+  "accuracy": 1.0,
+  "stress_precision": 0.0,
+  "stress_recall": 0.0,
+  "stress_f1": 0.0,
+  "confusion": {
+   "tn": 42,
+   "fp": 0,
+   "fn": 0,
+   "tp": 0
+  }
+ },
+ "subject": "S11",
+ "config": {
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "tick_ms": 500,
+  "norm_mode": "running",
+  "realtime": true,
+  "threads": 1,
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "server": "192.168.1.14:9099",
+  "local_server": false,
+  "clock_synced": false,
+  "total_wall_s": 300.5992775000632,
+  "clock_resync_s": 60.0
+ }
+}
