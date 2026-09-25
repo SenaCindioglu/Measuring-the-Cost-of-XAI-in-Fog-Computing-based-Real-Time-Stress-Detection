@@ -176,7 +176,12 @@ def build_explainer(method, model, device='cpu'):
     from xai.artifacts import load_artifacts
     from xai import lime_ as lime_mod, shap_ as shap_mod
 
-    record = load_artifacts()
+    # LIME arka plan kumesine ihtiyac duymuyor; onu okumak 3.4 MB'lik npz'yi
+    # diskten yuklemek ve SHA-256'sini dogrulamak demek. Kaynak kisitli bir
+    # dugumde bosuna maliyet.
+    needs_bg = method in ('shap', 'shap_ucuz')
+    record = load_artifacts(with_background=needs_bg)
+
     if method == 'lime':
         return lime_mod.from_artifacts(model, record, device=device)
     if method == 'lime_ucuz':
@@ -333,7 +338,13 @@ async def handle_client(reader, writer, state):
     cfg, model = state['cfg'], state['model']
     peer = writer.get_extra_info('peername')
 
-    body = await P.read_frame(reader)
+    try:
+        body = await P.read_frame(reader)
+    except asyncio.IncompleteReadError:
+        # Health checks and port probes may connect without sending a frame.
+        writer.close()
+        await writer.wait_closed()
+        return
     if body is None or P.msg_type(body) != P.TYPE_HELLO:
         writer.close()
         return
@@ -419,6 +430,26 @@ async def main_async(args):
 
     model, arch, meta = load_checkpoint(args.model, torch.device('cpu'), fallback_cfg=cfg)
 
+    explainer = None
+    if args.xai_method in ('lime', 'lime_ucuz', 'shap', 'shap_ucuz'):
+        from xai.artifacts import load_artifacts
+        if args.xai_method in ('lime', 'lime_ucuz'):
+            from xai.lime_ import LimeExplainer
+
+            record = load_artifacts(cfg, with_background=False)
+            lime_config = dict(record['lime'])
+            if args.xai_method == 'lime_ucuz':
+                lime_config['num_samples'] = 250
+            explainer = LimeExplainer(
+                model, num_channels=record['window']['num_channels'],
+                target_class=record.get('target_class', 1), device='cpu', **lime_config)
+        else:
+            from xai.shap_ import from_artifacts
+
+            record = load_artifacts(cfg, with_background=True)
+            explainer = from_artifacts(
+                model, record, device='cpu', cheap=args.xai_method == 'shap_ucuz')
+
     mean = std = None
     if args.norm_mode == 'fixed':
         tag = os.path.splitext(os.path.basename(args.model))[0]
@@ -443,6 +474,7 @@ async def main_async(args):
         sampler.start()
 
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
+             'explainer': explainer, 'xai_threshold': args.xai_threshold,
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
              'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler,
              'explainer': explainer, 'xai_threshold': args.xai_threshold,
@@ -472,6 +504,7 @@ async def main_async(args):
     else:
         print(f"XAI          : kapali (--xai-method none)")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
+    print(f"XAI          : {args.xai_method} (threshold={args.xai_threshold})")
     print("=" * 66)
     if args.host in ('0.0.0.0', '::'):
         addrs = local_addresses()
@@ -505,12 +538,20 @@ def main():
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
-    parser.add_argument('--xai-method', choices=XAI_METHODS, default='none',
+    # Varsayilanlar ortam degiskeninden okunur: Docker'da bayrak gecirmek
+    # icin komutu degistirmek gerekiyor, ortam degiskeni ise
+    # docker-compose'dan verilebiliyor (WESAD_XAI_METHOD=shap_ucuz
+    # docker compose up). Komut satirinda acikca verilen deger yine kazanir.
+    parser.add_argument('--xai-method', choices=XAI_METHODS,
+                        default=os.environ.get('WESAD_XAI_METHOD', 'none'),
                         help="Aciklayici. Yapilandirma checkpoints/xai_config.json'dan "
-                             "okunur; 'none' ise xai/ paketi hic import edilmez.")
-    parser.add_argument('--xai-threshold', type=float, default=0.0,
+                             "okunur; 'none' ise xai/ paketi hic import edilmez. "
+                             "Ortam degiskeni: WESAD_XAI_METHOD")
+    parser.add_argument('--xai-threshold', type=float,
+                        default=float(os.environ.get('WESAD_XAI_THRESHOLD', '0')),
                         help="Guven esigi: bunun ALTINDAKI pencereler aciklanir. "
-                             "0.0 = hic (taban kosusu), 1.0 = her pencere (en pahali).")
+                             "0.0 = hic (taban kosusu), 1.0 = her pencere (en pahali). "
+                             "Ortam degiskeni: WESAD_XAI_THRESHOLD")
     args = parser.parse_args()
 
     # Sessizce yanlis kosu yapmaktansa basta durdur: bu iki kombinasyon

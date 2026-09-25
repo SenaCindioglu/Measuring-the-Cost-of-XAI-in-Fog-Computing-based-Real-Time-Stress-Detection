@@ -11,4 +11,4 @@ psutil>=5.9
 # Sunucu --xai-method none ile kosuluyorsa shap gerekmez; xai/ paketi o
 # durumda hic import edilmiyor.
 scikit-learn>=1.3
-shap>=0.44
+shap>=0.45

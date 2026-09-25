@@ -11,6 +11,8 @@ env/
 .mypy_cache/
 .ruff_cache/
 
-# NOT: results/ BILEREK izleniyor. Makalenin butun kanitlari orada ve
-# her kosu commit ediliyor. results/* yok sayilirsa yeni olcum dosyalari
-# git status'ta hic gorunmez, commit edildigi sanilir ve sessizce kaybolur.
+# NOT: deploy dalindaki surumde burada "results/*" satiri vardi ve merge
+# sirasinda BILEREK cikarildi. results/ izlenmeye devam etmeli: makalenin
+# butun kanitlari orada ve her kosu commit ediliyor. Yok sayilsaydi yeni
+# olcum dosyalari git status'ta hic gorunmez, commit edildigi sanilir ve
+# sessizce kaybolurdu.

@@ -77,6 +77,64 @@ yoksa: `pip install psutil`
 
 ## Kullanım
 
+### Docker ile sunucuyu deploy et
+
+Sunucu, varsayılan olarak `running` normalizasyonu kullanır; bu modda WESAD
+ham veri klasörü gerekmez. Docker ve Docker Compose kurulu sunucuda proje kök
+klasöründen:
+
+```bash
+docker compose up -d --build
+docker compose logs -f stress-server
+```
+
+TCP sunucusu `0.0.0.0:9099` adresinde dinler. İstemciyi çalıştırırken sunucunun
+IP adresini kullan:
+
+```bash
+python compare_deployments.py --subject S11 --realtime \
+  --deployment fog=SERVER_IP:9099 --tag docker_test
+```
+
+Konteyneri durdurmak için:
+
+```bash
+docker compose down
+```
+
+`fixed` normalizasyon kullanılacaksa WESAD veri klasörünü sunucuya koyup
+`WESAD_DATA_PATH` ile konteynere mount etmen veya önceden üretilmiş norm stats
+dosyasını `checkpoints/` altında image'a dahil etmen gerekir.
+
+XAI ile Docker sunucusunu başlatmak için VM üzerinde:
+
+```bash
+WESAD_XAI_METHOD=lime_ucuz WESAD_XAI_THRESHOLD=1.0 \
+docker compose up -d --build
+```
+
+Ardından istemci makinesinde ayrı bir etiketle çalıştır:
+
+```bash
+python run_fog_experiment.py --server-host SERVER_IP --subject S11 \
+  --realtime --max-ticks 600 --live --tag xai_limeucuz
+```
+
+`--live` ve `--realtime` aynı seçenektir. XAI açıklama süresi sunucu cevabındaki
+`stages.xai` alanına yazılır; `threshold=1.0` her tahmin penceresinde açıklama
+çalıştırır. SHAP karşılaştırması için VM'yi şu şekilde başlat:
+
+```bash
+WESAD_XAI_METHOD=shap WESAD_XAI_THRESHOLD=1.0 \
+docker compose up -d --build
+```
+
+Daha hızlı SHAP yapılandırması için `WESAD_XAI_METHOD=shap_ucuz` kullan.
+
+Tam LIME yapılandırması için `WESAD_XAI_METHOD=lime` kullan; bu, seçili
+artifaktan gelen 500 perturbasyon örneğini çalıştırır. `lime_ucuz` 250 örnek
+kullanır.
+
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
 

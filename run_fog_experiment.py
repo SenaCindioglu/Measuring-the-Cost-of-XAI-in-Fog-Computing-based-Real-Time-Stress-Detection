@@ -126,7 +126,8 @@ def aggregate(summaries):
                         'kbps_recv': br * 8 / 1000.0 / w,
                         'kbps_total': (bs + br) * 8 / 1000.0 / w}
 
-    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference', 'postprocessing']
+    stage_names = ['resampling', 'preprocessing', 'tensor_prep', 'inference',
+                   'postprocessing', 'xai']
     stages = {}
     for st in stage_names:
         vals = [s['server_stages'][st] for s in summaries
@@ -170,7 +171,7 @@ def main():
     parser.add_argument('--tick-ms', type=int, default=cfg.DEFAULT_TICK_MS)
     parser.add_argument('--warmup-windows', type=int, default=cfg.DEFAULT_WARMUP_WINDOWS)
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
-    parser.add_argument('--realtime', action='store_true',
+    parser.add_argument('--realtime', '--live', dest='realtime', action='store_true',
                         help="Sensor gercek hizinda gonder (kuyruk gecikmesi ancak boyle anlamli)")
     parser.add_argument('--max-ticks', type=int, default=0)
     parser.add_argument('--live', action='store_true',
