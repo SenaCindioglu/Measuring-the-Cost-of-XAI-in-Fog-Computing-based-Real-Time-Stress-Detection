@@ -1,0 +1,148 @@
+{
+ "aciklama": "Yeni olcum degil, mevcut dosyalardan derleme. Her sutunun kaynagi ve olcum kosulu ayrica yazili.",
+ "sutunlar": [
+  {
+   "ad": "tek surec (native)",
+   "kaynak": "01_streaming/streaming_summary_native_fixed.json",
+   "kosul": "tek surec, ag yok, 1175 pencere, tek kosu",
+   "asamalar": {
+    "resampling": {
+     "median_ms": 1.3775000115856528,
+     "p95_ms": 2.32835998176597,
+     "yayilim_pct": null
+    },
+    "preprocessing": {
+     "median_ms": 0.21809997269883752,
+     "p95_ms": 0.40114002185873654,
+     "yayilim_pct": null
+    },
+    "tensor_prep": {
+     "median_ms": 0.14070002362132072,
+     "p95_ms": 0.24938003043644127,
+     "yayilim_pct": null
+    },
+    "inference": {
+     "median_ms": 2.682299993466586,
+     "p95_ms": 3.996689995983615,
+     "yayilim_pct": null
+    },
+    "postprocessing": {
+     "median_ms": 0.08599995635449886,
+     "p95_ms": 0.17098996322602034,
+     "yayilim_pct": null
+    },
+    "total": {
+     "median_ms": 4.688700020778924,
+     "p95_ms": 6.657960003940388,
+     "yayilim_pct": null
+    }
+   }
+  },
+  {
+   "ad": "tekrarli (native, 1 iplik)",
+   "kaynak": "02_benchmark/benchmark_pipeline_cmp.json",
+   "kosul": "4 tur donusumlu, yayilim tasiyan tek sutun",
+   "asamalar": {
+    "resampling": {
+     "median_ms": 1.5727999852970243,
+     "p95_ms": 2.999990014359356,
+     "yayilim_pct": 3.3329087713478804
+    },
+    "preprocessing": {
+     "median_ms": 0.25215002824552357,
+     "p95_ms": 0.7481599925085907,
+     "yayilim_pct": 3.5331285975045
+    },
+    "tensor_prep": {
+     "median_ms": 0.148899998748675,
+     "p95_ms": 0.3595699905417863,
+     "yayilim_pct": 2.7392502985731104
+    },
+    "inference": {
+     "median_ms": 3.0385499994736165,
+     "p95_ms": 4.784099996322766,
+     "yayilim_pct": 8.864957704335511
+    },
+    "postprocessing": {
+     "median_ms": 0.08709996473044157,
+     "p95_ms": 0.18633000436238956,
+     "yayilim_pct": 2.9799655557397595
+    },
+    "total": {
+     "median_ms": 5.5022000160533935,
+     "p95_ms": 7.951360032893717,
+     "yayilim_pct": 8.14512056565518
+    }
+   }
+  },
+  {
+   "ad": "tekrarli (prepared, 1 iplik)",
+   "kaynak": "02_benchmark/benchmark_pipeline_cmp.json",
+   "kosul": "yeniden ornekleme olcum DISINDA",
+   "asamalar": {
+    "preprocessing": {
+     "median_ms": 0.579599931370467,
+     "p95_ms": 1.3413900334853661,
+     "yayilim_pct": 7.9093172850233
+    },
+    "tensor_prep": {
+     "median_ms": 0.1349500089418143,
+     "p95_ms": 0.26922000106424054,
+     "yayilim_pct": 5.732134374476661
+    },
+    "inference": {
+     "median_ms": 2.9688999929931015,
+     "p95_ms": 4.9536899983650065,
+     "yayilim_pct": 9.117681033435606
+    },
+    "postprocessing": {
+     "median_ms": 0.08475000504404306,
+     "p95_ms": 0.16113000456243748,
+     "yayilim_pct": 5.506641878685292
+    },
+    "total": {
+     "median_ms": 3.9705999952275306,
+     "p95_ms": 6.348594985320225,
+     "yayilim_pct": 9.446486446988581
+    }
+   }
+  },
+  {
+   "ad": "fog dugumu (uctan uca)",
+   "kaynak": "04_fog/fog_xai_none.json",
+   "kosul": "istemci-sunucu ayri, gercek ag, 44 pencere",
+   "asamalar": {
+    "resampling": {
+     "median_ms": 1.0437000019010156,
+     "p95_ms": 1.1488749762065709,
+     "yayilim_pct": null
+    },
+    "preprocessing": {
+     "median_ms": 0.17179999849759042,
+     "p95_ms": 0.1789250149158761,
+     "yayilim_pct": null
+    },
+    "tensor_prep": {
+     "median_ms": 0.11395002366043627,
+     "p95_ms": 0.11738502071239054,
+     "yayilim_pct": null
+    },
+    "inference": {
+     "median_ms": 1.9478000176604837,
+     "p95_ms": 2.5649150396930054,
+     "yayilim_pct": null
+    },
+    "postprocessing": {
+     "median_ms": 0.04610000178217888,
+     "p95_ms": 0.05322500655893237,
+     "yayilim_pct": null
+    },
+    "total": {
+     "median_ms": 3.5302,
+     "p95_ms": 4.220515000000001,
+     "yayilim_pct": null
+    }
+   }
+  }
+ ]
+}

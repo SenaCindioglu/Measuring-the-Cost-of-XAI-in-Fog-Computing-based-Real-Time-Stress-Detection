@@ -1,0 +1,91 @@
+{
+ "config": {
+  "subject": "S11",
+  "n_windows": 40,
+  "sensitivity_windows": 10,
+  "trials": 3,
+  "threads": 1,
+  "kalite": "bu makinede olculdu (donanimdan bagimsiz)",
+  "gecikme": "04_fog (fog dugumu)"
+ },
+ "noktalar": [
+  {
+   "nokta": "shap_ucuz",
+   "config": {
+    "method": "shap",
+    "nsamples": 50,
+    "background_size": 100,
+    "seed": 0
+   },
+   "faithfulness": 0.2499041138542816,
+   "faithfulness_sem": 0.0425691098989053,
+   "monotonicity": 0.5650000000000001,
+   "sensitivity": 0.12276813109634728,
+   "sensitivity_sem": 0.0031906813902930916,
+   "gecikme_ms": 395.0340863692955,
+   "gecikme_p95_ms": 460.46881501679314,
+   "response_mean_ms": 450.53535909090914,
+   "gecikme_kaynagi": "fog_xai_shapucuz.json",
+   "n_pencere": 40
+  },
+  {
+   "nokta": "lime_ucuz",
+   "config": {
+    "method": "lime",
+    "num_samples": 250,
+    "num_segments": 20,
+    "kernel_width": 0.5,
+    "seed": 0
+   },
+   "faithfulness": 0.2091552377678454,
+   "faithfulness_sem": 0.03453816558224856,
+   "monotonicity": 0.60375,
+   "sensitivity": 0.04890057064810572,
+   "sensitivity_sem": 0.0015587682589732637,
+   "gecikme_ms": 590.0948045441924,
+   "gecikme_p95_ms": 650.6077900266974,
+   "response_mean_ms": 663.315718181818,
+   "gecikme_kaynagi": "fog_xai_limeucuz.json",
+   "n_pencere": 40
+  },
+  {
+   "nokta": "lime",
+   "config": {
+    "method": "lime",
+    "num_samples": 500,
+    "num_segments": 20,
+    "kernel_width": 0.5,
+    "seed": 0
+   },
+   "faithfulness": 0.23236941667739303,
+   "faithfulness_sem": 0.037311321756803975,
+   "monotonicity": 0.57875,
+   "sensitivity": 0.04463464977525003,
+   "sensitivity_sem": 0.0018085514376891677,
+   "gecikme_ms": 1188.785909096954,
+   "gecikme_p95_ms": 1295.893449994037,
+   "response_mean_ms": 1251.330159090909,
+   "gecikme_kaynagi": "fog_xai_lime.json",
+   "n_pencere": 40
+  },
+  {
+   "nokta": "shap",
+   "config": {
+    "method": "shap",
+    "nsamples": 200,
+    "background_size": 100,
+    "seed": 0
+   },
+   "faithfulness": 0.263220952716656,
+   "faithfulness_sem": 0.044475904039467044,
+   "monotonicity": 0.54875,
+   "sensitivity": 0.12822660772009356,
+   "sensitivity_sem": 0.004641069786176402,
+   "gecikme_ms": 1422.2786159106445,
+   "gecikme_p95_ms": 1465.0056849815883,
+   "response_mean_ms": 1469.7810181818181,
+   "gecikme_kaynagi": "fog_xai_shap.json",
+   "n_pencere": 40
+  }
+ ]
+}

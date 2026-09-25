@@ -269,6 +269,91 @@ gerekçesi tam olarak budur.
 
 ---
 
+## 10_yuk — çok istemcili yük (A4)
+
+1/2/4 istemci, fog düğümü, S11+S14 döngüsel, 600 tick. Tek istemci
+satırları `04_fog/`'dan.
+
+| durum | istemci | queuing ort | q p95 | execution | response ort | response p95 |
+|---|---|---|---|---|---|---|
+| XAI yok | 1 | 0.030 ms | 0.03 | 3.6 | 15.9 | 42.2 |
+| XAI yok | 2 | 1.607 ms | 4.51 | 3.6 | 24.3 | 107.8 |
+| XAI yok | 4 | 4.555 ms | 12.50 | 3.7 | 28.5 | 120.3 |
+| hep açıkla | 1 | 0.032 ms | 0.05 | 400.2 | 450.5 | 574.0 |
+| hep açıkla | 2 | **160.1 ms** | 381.6 | 371.1 | 601.3 | 853.6 |
+| hep açıkla | 4 | **437.3 ms** | 1125.1 | 370.7 | 984.9 | 1643.1 |
+
+**Mekanizma ortalama doluluk değil, eşzamanlı patlama.** 4 istemcide
+teorik doluluk %32 iken ölçülen kuyruk p95 1125 ms. İstemciler birlikte
+başlatıldığı için faz hizalı kalıyor, pencerelerini aynı anda üretiyor ve
+tek worker'da açıklamalar arka arkaya diziliyor:
+
+```
+(N-1) × açıklama süresi = 3 × 370 = 1110 ms     ölçülen p95 1125 ms
+```
+
+XAI'siz tarafta da tutuyor: 3 × 3.7 = 11 ms, ölçülen 12.5 ms.
+
+**Bu bir üst sınırdır** — gerçek dağıtımda istemciler rastgele fazlarda
+başlar. Raporda belirtilmeli.
+
+**Kapasite** (hop 5000 ms / execution): XAI yok 1394 · seçici 90 ·
+hep açıkla 12 istemci. Referans makale tek worker için ~20 kullanıcı
+veriyor. Seçici açıklama kapasiteyi **7.5 kat** artırıyor.
+
+---
+
+## 11_pareto — kalite / gecikme dengesi (C5)
+
+Kalite **bu makinede** ölçüldü (donanımdan bağımsız), gecikme `04_fog/`'dan
+(dağıtım donanımı). `lime_ucuz` yapılandırması Colab taramasında hiç yoktu;
+Pareto grafiğinin o noktası kalite ekseninde boşluktaydı, burada kapatıldı.
+
+| nokta | gecikme | faithfulness | monotonicity | sensitivity |
+|---|---|---|---|---|
+| `shap_ucuz` | 395 ms | 0.2499 ± 0.0426 | 0.5650 | 0.1228 |
+| `lime_ucuz` | 590 ms | 0.2092 ± 0.0345 | 0.6038 | **0.0489** |
+| `lime` | 1189 ms | 0.2324 ± 0.0373 | 0.5787 | **0.0446** |
+| `shap` | 1422 ms | 0.2632 ± 0.0445 | 0.5487 | 0.1282 |
+
+**Faithfulness'ta hiçbir nokta diğerini yenmiyor.** 40 pencerede standart
+hata ~0.04, farkların hepsi onun içinde. Dolayısıyla seçim faithfulness'a
+göre yapılamaz — Colab taramasının 0.003'lük farklarla kazanan seçmesi bu
+yüzden yanlıştı.
+
+**Ayrışma sensitivity'de ve kesin:** LIME 0.045–0.049, SHAP 0.123–0.128.
+Fark hata payının 15 katı. **LIME 2.7 kat daha kararlı açıklama üretiyor.**
+
+Gerçek denge şu: **SHAP 3 kat ucuz, LIME 2.7 kat kararlı, sadakat eşit.**
+
+`pareto_c5.png` iki panelli: solda faithfulness (hata çubukları örtüşüyor),
+sağda sensitivity (ayrışma net).
+
+---
+
+## 12_profil — aşama bazlı profil tablosu (B1)
+
+Yeni ölçüm değil, dört kaynaktan derleme. Aynı aşamanın değeri kaynağa göre
+değişiyor ve sebepleri farklı; dağılmış halde bırakılırsa makalede yanlış
+satır alıntılanır.
+
+| aşama | tek süreç | tekrarlı native | tekrarlı prepared | fog uçtan uca |
+|---|---|---|---|---|
+| resampling | 1.378 | 1.573 (±%3.3) | — | 1.044 |
+| preprocessing | 0.218 | 0.252 (±%3.5) | 0.580 (±%7.9) | 0.172 |
+| tensor_prep | 0.141 | 0.149 (±%2.7) | 0.135 (±%5.7) | 0.114 |
+| inference | 2.682 | 3.039 (±%8.9) | 2.969 (±%9.1) | 1.948 |
+| postprocessing | 0.086 | 0.087 (±%3.0) | 0.085 (±%5.5) | 0.046 |
+| **total** | 4.689 | **5.502 (±%8.1)** | 3.971 (±%9.4) | **3.530** |
+
+Yayılım taşıyan tek sütun `tekrarlı native` (4 tur dönüşümlü) — makalede
+belirsizlik gerektiğinde oradan alınmalı. Fog sütunu düşük çünkü o makine
+daha hızlı; tek süreç sütunu istemci makinesinde ölçüldü.
+
+Üreten: `python -m tools.profile_table`
+
+---
+
 ## eski_ve_hatali — makaleye girmez
 
 Ayrıntılı gerekçeler: [eski_ve_hatali/README.md](eski_ve_hatali/README.md).
