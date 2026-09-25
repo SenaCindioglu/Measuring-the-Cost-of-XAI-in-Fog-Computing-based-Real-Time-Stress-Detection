@@ -1,0 +1,16 @@
+# Python uretilen dosyalar
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Yerel ortamlar ve arac onbellekleri
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# NOT: results/ BILEREK izleniyor. Makalenin butun kanitlari orada ve
+# her kosu commit ediliyor. results/* yok sayilirsa yeni olcum dosyalari
+# git status'ta hic gorunmez, commit edildigi sanilir ve sessizce kaybolur.
