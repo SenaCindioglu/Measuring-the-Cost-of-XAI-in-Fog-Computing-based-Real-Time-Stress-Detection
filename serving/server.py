@@ -160,7 +160,21 @@ def resource_summary(sampler):
 
 #: --xai-method ile secilebilen aciklayicilar. Iki maliyet noktasi kasitli:
 #: secici XAI'nin kazanci aciklama pahalilastikca buyuyor.
-XAI_METHODS = ('none', 'lime', 'lime_ucuz', 'shap', 'shap_ucuz')
+XAI_METHODS = ('none', 'lime', 'lime_cheap', 'shap', 'shap_cheap',
+               # Eski Turkce adlar GERIYE UYUMLULUK icin kabul ediliyor.
+               # Ikinci bilgisayarda ve bulut VM'inde kosan komutlar,
+               # betikler ve docker-compose dosyalari bunlari kullaniyor;
+               # tek seferde degistirmek sessiz kosu hatalari uretirdi.
+               # canonical_method() ikisini de ayni kimlige indirger.
+               'lime_ucuz', 'shap_ucuz')
+
+#: Eski ad -> yeni ad. Raporda ve grafiklerde yalnizca yeni adlar gorunur.
+_METHOD_ALIASES = {'lime_ucuz': 'lime_cheap', 'shap_ucuz': 'shap_cheap'}
+
+
+def canonical_method(method):
+    """Eski Turkce adi yeni Ingilizce karsiligina cevirir."""
+    return _METHOD_ALIASES.get(method, method)
 
 
 def build_explainer(method, model, device='cpu'):
@@ -171,7 +185,7 @@ def build_explainer(method, model, device='cpu'):
     ve o durumda hic gerekmiyor). Tepede import edilseydi XAI kullanmayan
     bir dagitimda sunucu hic acilmazdi.
     """
-    if method in (None, 'none'):
+    if canonical_method(method) in (None, 'none'):
         return None
     from xai.artifacts import load_artifacts
     from xai import lime_ as lime_mod, shap_ as shap_mod
@@ -179,18 +193,19 @@ def build_explainer(method, model, device='cpu'):
     # LIME arka plan kumesine ihtiyac duymuyor; onu okumak 3.4 MB'lik npz'yi
     # diskten yuklemek ve SHA-256'sini dogrulamak demek. Kaynak kisitli bir
     # dugumde bosuna maliyet.
-    needs_bg = method in ('shap', 'shap_ucuz')
+    method = canonical_method(method)
+    needs_bg = method in ('shap', 'shap_cheap')
     record = load_artifacts(with_background=needs_bg)
 
     if method == 'lime':
         return lime_mod.from_artifacts(model, record, device=device)
-    if method == 'lime_ucuz':
+    if method == 'lime_cheap':
         # CPU'da LIME'in maliyeti ornek sayisiyla dogrusal; dilim sayisi
         # bedava (olculdu). Ucuz nokta bu yuzden num_samples'tan geciyor.
         return lime_mod.from_artifacts(model, record, device=device, num_samples=250)
     if method == 'shap':
         return shap_mod.from_artifacts(model, record, device=device)
-    if method == 'shap_ucuz':
+    if method == 'shap_cheap':
         return shap_mod.from_artifacts(model, record, device=device, cheap=True)
     raise ValueError("Bilinmeyen --xai-method: " + str(method))
 
@@ -372,7 +387,8 @@ async def handle_client(reader, writer, state):
                     # adinda kaliyordu (fog_xai_lime.json gibi). Dosya adi
                     # degistigi anda bilgi kayboluyor ve sonuclar tekrar
                     # uretilemez hale geliyor, o yuzden JSON'un icine yazilir.
-                    xai_info = {'method': state.get('xai_method', 'none'),
+                    xai_info = {'method': canonical_method(state.get('xai_method', 'none')),
+                                'method_as_given': state.get('xai_method', 'none'),
                                 'threshold': state.get('xai_threshold', 0.0),
                                 'warmup_ms': state.get('xai_warmup_ms')}
                     explainer = state.get('explainer')
@@ -429,26 +445,6 @@ async def main_async(args):
         torch.set_num_threads(args.threads)
 
     model, arch, meta = load_checkpoint(args.model, torch.device('cpu'), fallback_cfg=cfg)
-
-    explainer = None
-    if args.xai_method in ('lime', 'lime_ucuz', 'shap', 'shap_ucuz'):
-        from xai.artifacts import load_artifacts
-        if args.xai_method in ('lime', 'lime_ucuz'):
-            from xai.lime_ import LimeExplainer
-
-            record = load_artifacts(cfg, with_background=False)
-            lime_config = dict(record['lime'])
-            if args.xai_method == 'lime_ucuz':
-                lime_config['num_samples'] = 250
-            explainer = LimeExplainer(
-                model, num_channels=record['window']['num_channels'],
-                target_class=record.get('target_class', 1), device='cpu', **lime_config)
-        else:
-            from xai.shap_ import from_artifacts
-
-            record = load_artifacts(cfg, with_background=True)
-            explainer = from_artifacts(
-                model, record, device='cpu', cheap=args.xai_method == 'shap_ucuz')
 
     mean = std = None
     if args.norm_mode == 'fixed':

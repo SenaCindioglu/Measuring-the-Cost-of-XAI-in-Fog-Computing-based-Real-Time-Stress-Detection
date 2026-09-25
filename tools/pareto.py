@@ -5,12 +5,12 @@ FAZ C5: kalite-gecikme Pareto egrisi.
 
 NE YAPAR
 --------
-Dondurulmus dort calisma noktasinin (lime, lime_ucuz, shap, shap_ucuz)
+Dondurulmus dort calisma noktasinin (lime, lime_cheap, shap, shap_cheap)
 KALITESINI olcer ve fog dugumunde olculen GECIKMEYLE eslestirir, sonra
 Pareto grafigini cizer.
 
 NEDEN GEREKLI: tarama Colab'da GPU'da kosuldu, oradaki sureler dagitim
-donanimini yansitmiyor. Ustelik `lime_ucuz` (250 ornek, 20 dilim,
+donanimini yansitmiyor. Ustelik `lime_cheap` (250 ornek, 20 dilim,
 kernel 0.5) taramada HIC olculmedi -- o yapilandirma tarama izgarasinda
 yoktu. Yani Pareto grafiginin dort noktasindan biri kalite ekseninde
 bosluktaydi.
@@ -46,9 +46,9 @@ from xai.quality import evaluate
 
 #: (ad, kurucu, 04_fog dosyasi) -- sunucudaki --xai-method adlariyla ayni
 POINTS = [
-    ('shap_ucuz', lambda m, r, d: shap_mod.from_artifacts(m, r, device=d, cheap=True),
+    ('shap_cheap', lambda m, r, d: shap_mod.from_artifacts(m, r, device=d, cheap=True),
      'fog_xai_shapucuz.json'),
-    ('lime_ucuz', lambda m, r, d: lime_mod.from_artifacts(m, r, device=d, num_samples=250),
+    ('lime_cheap', lambda m, r, d: lime_mod.from_artifacts(m, r, device=d, num_samples=250),
      'fog_xai_limeucuz.json'),
     ('lime', lambda m, r, d: lime_mod.from_artifacts(m, r, device=d),
      'fog_xai_lime.json'),

@@ -16,7 +16,7 @@
  },
  "satirlar": [
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 0.0,
    "kind": "olculdu",
@@ -35,7 +35,7 @@
    "tasarruf_orani": 1.0
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 0.6,
    "kind": "turetildi",
@@ -54,7 +54,7 @@
    "tasarruf_orani": 0.9370860927152318
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 0.7,
    "kind": "turetildi",
@@ -73,7 +73,7 @@
    "tasarruf_orani": 0.8956953642384106
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 0.8,
    "kind": "turetildi",
@@ -92,7 +92,7 @@
    "tasarruf_orani": 0.8559602649006622
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 0.9,
    "kind": "turetildi",
@@ -111,7 +111,7 @@
    "tasarruf_orani": 0.7864238410596026
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S11",
    "esik": 1.0,
    "kind": "olculdu",
@@ -130,7 +130,7 @@
    "tasarruf_orani": 0.0
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 0.0,
    "kind": "olculdu",
@@ -149,7 +149,7 @@
    "tasarruf_orani": 1.0
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 0.6,
    "kind": "turetildi",
@@ -168,7 +168,7 @@
    "tasarruf_orani": 0.9831649831649831
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 0.7,
    "kind": "turetildi",
@@ -187,7 +187,7 @@
    "tasarruf_orani": 0.9562289562289562
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 0.8,
    "kind": "turetildi",
@@ -206,7 +206,7 @@
    "tasarruf_orani": 0.8821548821548821
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 0.9,
    "kind": "turetildi",
@@ -225,7 +225,7 @@
    "tasarruf_orani": 0.7070707070707071
   },
   {
-   "aciklayici": "shap_ucuz",
+   "aciklayici": "shap_cheap",
    "denek": "S14",
    "esik": 1.0,
    "kind": "olculdu",
@@ -244,7 +244,7 @@
    "tasarruf_orani": 0.0
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 0.0,
    "kind": "olculdu",
@@ -263,7 +263,7 @@
    "tasarruf_orani": 1.0
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 0.6,
    "kind": "turetildi",
@@ -282,7 +282,7 @@
    "tasarruf_orani": 0.9370860927152318
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 0.7,
    "kind": "turetildi",
@@ -301,7 +301,7 @@
    "tasarruf_orani": 0.8956953642384106
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 0.8,
    "kind": "turetildi",
@@ -320,7 +320,7 @@
    "tasarruf_orani": 0.8559602649006622
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 0.9,
    "kind": "turetildi",
@@ -339,7 +339,7 @@
    "tasarruf_orani": 0.7864238410596026
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S11",
    "esik": 1.0,
    "kind": "olculdu",
@@ -358,7 +358,7 @@
    "tasarruf_orani": 0.0
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 0.0,
    "kind": "olculdu",
@@ -377,7 +377,7 @@
    "tasarruf_orani": 1.0
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 0.6,
    "kind": "turetildi",
@@ -396,7 +396,7 @@
    "tasarruf_orani": 0.9831649831649831
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 0.7,
    "kind": "turetildi",
@@ -415,7 +415,7 @@
    "tasarruf_orani": 0.9562289562289562
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 0.8,
    "kind": "turetildi",
@@ -434,7 +434,7 @@
    "tasarruf_orani": 0.8821548821548821
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 0.9,
    "kind": "turetildi",
@@ -453,7 +453,7 @@
    "tasarruf_orani": 0.7070707070707071
   },
   {
-   "aciklayici": "lime_ucuz",
+   "aciklayici": "lime_cheap",
    "denek": "S14",
    "esik": 1.0,
    "kind": "olculdu",

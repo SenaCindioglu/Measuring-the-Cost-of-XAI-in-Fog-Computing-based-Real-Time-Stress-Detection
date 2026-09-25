@@ -10,7 +10,7 @@
  },
  "noktalar": [
   {
-   "nokta": "shap_ucuz",
+   "nokta": "shap_cheap",
    "config": {
     "method": "shap",
     "nsamples": 50,
@@ -29,7 +29,7 @@
    "n_pencere": 40
   },
   {
-   "nokta": "lime_ucuz",
+   "nokta": "lime_cheap",
    "config": {
     "method": "lime",
     "num_samples": 250,

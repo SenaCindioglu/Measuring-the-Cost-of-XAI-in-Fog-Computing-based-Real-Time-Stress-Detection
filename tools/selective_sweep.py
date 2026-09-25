@@ -62,8 +62,8 @@ from config import config
 
 #: 04_fog dosya adi -> okunabilir aciklayici adi
 EXPLAINERS = [
-    ('shap_ucuz', 'fog_xai_shapucuz.json'),
-    ('lime_ucuz', 'fog_xai_limeucuz.json'),
+    ('shap_cheap', 'fog_xai_shapucuz.json'),
+    ('lime_cheap', 'fog_xai_limeucuz.json'),
     ('lime',      'fog_xai_lime.json'),
     ('shap',      'fog_xai_shap.json'),
 ]
