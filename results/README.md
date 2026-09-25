@@ -354,6 +354,68 @@ daha hızlı; tek süreç sütunu istemci makinesinde ölçüldü.
 
 ---
 
+## 13_bulut — bulut yerleşimi (A6), Docker ile
+
+Sunucu **DigitalOcean VPS**'te (167.71.43.64, "DO-Regular" CPU, 2 GB RAM),
+Docker konteynerinde. İstemci bu makinede, internet üzerinden.
+
+**Dosya adları düzeltildi.** Ölçümler `fog_cloud_xai_*` ve
+`fog_docker_load_4` adlarıyla gelmişti ama hepsi buluta gidiyor; `fog`
+öneki yanıltıcıydı. Gerçek adres her koşunun `config.server` alanında.
+
+| dosya | ne |
+|---|---|
+| `cloud_taban_3tur.json` | XAI'siz, 3 tur dönüşümlü, tam kayıt |
+| `cloud_xai_{shapucuz,limeucuz,lime,shap}.json` | dört açıklayıcı, her pencere |
+| `cloud_load_4.json` | 4 istemci, **4120 ölçülen pencere** |
+
+### Bulutta XAI maliyeti
+
+| açıklayıcı | xai | execution | response | p95 | latency |
+|---|---|---|---|---|---|
+| `shap_ucuz` | 337 ms | 343.6 | **429.8** | 509.0 | 60.5 |
+| `lime_ucuz` | 361 ms | 344.3 | 463.3 | 608.3 | 53.1 |
+| `lime` | 782 ms | 747.6 | 870.1 | 1091.8 | 54.0 |
+| `shap` | 1220 ms | 1173.3 | **1300.5** | 1715.8 | 54.8 |
+
+### Üç yerleşim yan yana (response medyan, ms)
+
+| açıklayıcı | edge (ortak) | fog (LAN) | cloud (internet) |
+|---|---|---|---|
+| yok | 7.3 | 10.6 | **63.5** |
+| `shap_ucuz` | 462.0 | 442.6 | 429.8 |
+| `lime_ucuz` | 352.8 | 645.2 | 463.3 |
+| `lime` | 690.0 | 1227.5 | 870.1 |
+| `shap` | 1154.5 | 1456.2 | 1300.5 |
+
+**Buluttaki fark ağdan geliyor, hesaptan değil.** Latency edge'de ~0,
+fog'da 4.3–5.3 ms, bulutta **53–61 ms**. Hesap tarafında bulut VPS'i fog
+düğümünden yavaş değil; `shap_ucuz`'da hatta biraz hızlı (337'ye karşı
+395 ms).
+
+**Asıl sonuç:** açıklama açıkken yerleşim farkı önemsizleşiyor. XAI'siz
+durumda bulut edge'in 8.7 katı (63.5 / 7.3), ama `shap` ile yalnızca 1.13
+katı (1300.5 / 1154.5) — çünkü 50 ms'lik ağ farkı 1200 ms'lik açıklamanın
+yanında kayboluyor. Bu, referans makalenin "fog, cloud'dan üstündür"
+sonucunu **XAI yükü altında geçersiz kılıyor**.
+
+**Uyarı:** bu sütunlar farklı yazılım yığınlarında ölçüldü (bkz.
+`07_edge_xai` uyarısı). Bulut Docker'da python:3.11 çalıştırıyor, fog
+düğümü Python 3.14, edge Python 3.11. Yerleşim karşılaştırması bu farkı
+içerir.
+
+### 4 istemci yükü, bulutta
+
+```
+n=4120 pencere   queuing ort 4.74 ms  p95 16.08 ms   response 62.1 ms  p95 117.8 ms
+```
+
+`10_yuk/`'teki fog koşusunun bulut karşılığı. Kuyruk fog'daki XAI'siz
+4 istemci koşusuna (p95 12.50 ms) yakın — beklenen, çünkü ikisinde de
+açıklama kapalı.
+
+---
+
 ## eski_ve_hatali — makaleye girmez
 
 Ayrıntılı gerekçeler: [eski_ve_hatali/README.md](eski_ve_hatali/README.md).

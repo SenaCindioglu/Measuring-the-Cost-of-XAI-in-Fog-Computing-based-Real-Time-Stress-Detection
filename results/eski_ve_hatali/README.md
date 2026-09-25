@@ -99,3 +99,19 @@ girmeli.
 
 Gerçek zamanlı olmadıkları için kuyruk gecikmesi ve jitter anlamsız; koşu
 uzunlukları da rapor için yetersiz.
+
+---
+
+## Bulut duman testi
+
+| Dosya | Sorun |
+|---|---|
+| `cloud_duman_testi.json` | Kurulum doğrulaması, ölçüm değil. |
+
+180 tick (1.5 dk), `realtime` kapalı, tek tur. Docker konteynerinin buluta
+düzgün açıldığını görmek için koşuldu. `realtime` kapalıyken istemci
+mümkün olduğunca hızlı gönderir, dolayısıyla queuing ve bandwidth gerçek
+yükü yansıtmaz; tek tur olduğu için yayılım da yok.
+
+Aynı kurulumun gerçek ölçümü: `13_bulut/cloud_taban_3tur.json`
+(3 tur dönüşümlü, realtime, tam kayıt).
