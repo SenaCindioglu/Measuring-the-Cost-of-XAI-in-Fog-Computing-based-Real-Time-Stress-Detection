@@ -699,13 +699,38 @@ start /affinity 1 python -m serving.server --host 0.0.0.0 --threads 1
 taskset -c 0 python -m serving.server --host 0.0.0.0 --threads 1
 ```
 
-`--threads 1` PyTorch'un kaç iş parçacığı kullanacağını sınırlar, çekirdek
-kilitleme ise işletim sisteminin o süreci tek çekirdekte tutmasını sağlar.
-İkisi birlikte Pi sınıfı bir düğümü kabaca taklit eder.
+### ⚠️ ÖLÇÜLDÜ: tek çekirdeğe kilitlemek bu iş yükünde hiçbir şey değiştirmiyor
 
-Bu bir **taklittir** ve raporda böyle belirtilmelidir. Yine de "güçlü bir
-masaüstünde ölçtük" demekten çok daha savunulabilir bir kurulumdur. En temizi
-iki koşuyu da yapıp yan yana vermek:
+Yukarıdaki yöntem **bağlayıcı değil.** İki sebebi de ölçüldü:
+
+1. `--threads 1` zaten varsayılan (`config.DEFAULT_THREADS`), yani "normal"
+   koşu da tek iplikle çalışıyor. İki mod arasındaki tek fark affinity kalıyor.
+2. Süreç tek iplik olduğu için **zaten bir çekirdeği aşmıyor**. Fog
+   düğümünde ölçülen süreç CPU'su (bir çekirdeğe göre yüzde):
+
+   | koşu | ortalama | tepe |
+   |---|---|---|
+   | XAI yok | %0.0 | %6.2 |
+   | `shap_ucuz`, her pencere | %5.0 | %105.7 |
+   | `shap`, her pencere | %25.9 | %106.2 |
+   | 4 istemci + `shap_ucuz` | %15.1 | %111.1 |
+
+   Tepe değerler %100'ün hemen üstünde. Bir çekirdeğe kilitlemek ölçülebilir
+   hiçbir fark yaratmaz.
+
+**Bağlayıcı olan tek yöntem kesirli CPU kotasıdır** (Docker `--cpus=0.1`).
+O, `shap_ucuz`'un 400 ms'sini ~4 saniyeye çıkarır ve 5 saniyelik hop
+bütçesini neredeyse doldurur. Bedeli: Docker Desktop kurulumu ve torch'lu
+imaj.
+
+**Alternatif — ölçmeden yazmak.** Kısıt deneyi yapmadan da aynı sonuca
+ölçülmüş sayılardan ulaşılabilir: referans çalışmanın Raspberry Pi 4
+worker'ında execution 34.7 ms, bu çalışmada 3.6 ms, yani ~10 kat fark.
+Aynı oran açıklamaya uygulanırsa `shap_ucuz` bir Pi 4'te ~4 saniye eder.
+Bu, "taklit" ibaresine gerek bırakmadan seçici açıklamanın gerçek fog
+donanımında neden zorunlu olduğunu gösterir.
+
+Aşağıdaki iki koşulu yine de yapmak istersen (taklit olduğu belirtilerek):
 
 ```bash
 # 1) Sunucu normal modda acikken
