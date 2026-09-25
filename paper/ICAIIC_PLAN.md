@@ -3,10 +3,10 @@
 Hazırlanma: 25 Eylül 2026. Bu dosya `WRITING_PLAN.md`'nin yerine geçer
 (o ICACT içindi; yapı büyük ölçüde aynı, kapsam kararları burada güncel).
 
-**Hatırlatma:** 20 Eylül'de hocanın rotasıyla ICAIIC 2027 son tarihi de
-**1 Ekim 2026** olarak kaydedilmişti. CFP'den doğrula — sayfa sınırı ve tarih
-bu planın her şeyini belirliyor. ICAIIC bildirileri IEEE çift sütun, genellikle
-**4–6 sayfa**. Plan 6 sayfa varsayıyor.
+**CFP'den doğrulandı (25 Eylül):** son tarih **15 Ekim 2026**, EDAS
+https://edas.info/N35066, IEEE çift sütun, en az 10 pt, A4/letter,
+**en fazla 6 sayfa** (en az 3). Yani 20 gün var, 6 değil — çizelge ve F4
+kararı buna göre güncellendi (Bölüm F, G).
 
 ---
 
@@ -50,7 +50,7 @@ seçim. Aşağıda nasıl yazılacağı var.
 
 | # | Hakem itirazı | Şiddet | Ön cevap / yapılacak |
 |---|---|---|---|
-| Z1 | "Neden en iyi model değil?" | **yüksek** | III.A'da gecikme odaklı model seçimi tablosu. Dengeli CNN LOSO F1 0.92, TranSensFusers 0.904; CNN 8× az parametre. |
+| Z1 | "Neden en iyi model değil?" | **yüksek** | III.A'da gecikme odaklı model seçimi tablosu. **Ölçüldü (25 Eyl, aynı CPU, tek iplik):** TranSensFusers 1,859,026 param / 103.7 ms; CNN 49,890 / 3.63 ms → **37.3× parametre, 28.6× çıkarım**. Dengeli CNN LOSO F1 0.92, transformer 0.904. Cevap kapanmış sayılır. |
 | Z2 | "n=2 tutulmuş denek" | yüksek | Sınırlılıklarda açıkça. Kalibrasyon bulgusu n=2 üzerine kurulu, "denek bağımlı" iddiası genelleme değil gözlem. |
 | Z3 | "SHAP dediğiniz KernelSHAP mi?" | yüksek | Her yerde **SHAP GradientExplainer** yaz. Literatürdeki "SHAP yavaş" iddiası KernelSHAP'a ait; farklı maliyet yapısı. Bunu Discussion'da açıkla — bulguları literatürden ayıran şey bu. |
 | Z4 | "Bitirmede SHAP daha kararlıydı, burada LIME. Hangisi doğru?" | **yüksek** | **Bitirmenin XAI kalite tablosunu bu bildiriye KOYMA.** Farklı model, farklı normalizasyon uzayı, farklı LIME uygulaması (standart paket vs bölge tabanlı), metrik ölçeği 10× farklı. Karşılaştırılamaz; ikisini yan yana koymak hakemi bu soruya davet eder. |
@@ -113,9 +113,30 @@ LOSO ile raporlanmış, karşılaştırma adil olur. Hangisinin son eğitim oldu
 sen biliyorsun; kayıtta hangi seed ve hangi undersampling ile üretildiğini de
 yaz. Val F1 0.9386'yı **kullanma**, iki denek üzerinden ve LOSO değil.
 
-**Eksik sayı:** TranSensFusers'ın parametre sayısı ve çıkarım süresi. Gecikme
-odaklı seçim gerekçesi için ikisinden en az biri lazım. Yoksa gerekçe "8×
-az parametre" yerine yalnızca "daha küçük" kalır. Bitirme kodundan çıkarılmalı.
+**TranSensFusers sayıları (25 Eyl, `Transformer.ipynb` hücre 10'dan
+çıkarılıp bu makinede ölçüldü):** 1,859,026 parametre (not defteri çıktısıyla
+birebir), 103.7 ms medyan / 118.1 ms p95 çıkarım, girdi 14×7000 @ 700 Hz.
+Aynı koşulda CNN 3.63 ms. Bu kapandı.
+
+### ⚠️ B2-ek: %91.13 tek bölünmeden geliyor, LOSO değil
+
+Hücre 10'daki `Config`: `TEST_SUBJECT = 'S3'`, `VAL_SUBJECT = 'S16'`, geri
+kalan 13 denek eğitim. Yani bitirmenin "LOSO" dediği sayı **tek bir test
+deneğinin** (S3) sonucu; 15 katlı ortalama değil. Doğrulama F1'i 1.0000 (S16)
+— tek denekte olağan ama kırılgan.
+
+Bildiride bu sayıya **"LOSO" deme.** Doğru ifade:
+
+> *…reached 91.13% accuracy on a single held-out subject (S3) in the offline
+> study [thesis]…*
+
+CNN'in 0.92'si ise gerçek 15 katlı LOSO. Tablo I'de ikisinin protokolü ayrı
+sütunda yazılmalı; aksi halde hakem kodu isterse tutarsızlık çıkar. Bu ayrıca
+Z1'i güçlendiriyor: CNN daha sıkı protokolde aynı seviyeyi tutuyor.
+
+**Dikkat — pencere hızı da farklı:** transformer 700 Hz ham sinyalde (7000
+örnek/pencere), CNN 64 Hz'de (640). Tablo I'de "sampling rate" sütunu olsun;
+28.6× çıkarım farkının bir kısmı buradan geliyor ve dürüstçe gösterilmeli.
 
 ### B3. Adlandırma — tutarlılık
 
@@ -285,7 +306,7 @@ sınır · kullanıcı çalışması yok. Future: Pi 4 (IISEC), çok worker, ki�
 | Fig 4 | yerleşim × açıklayıcı | `14_figures/fig5` | ✅ |
 | Fig 5 | kalibrasyon reliability | `14_figures/fig6` | ✅ |
 | (Fig 6) | Pareto, yer kalırsa | `14_figures/fig3` | ✅ |
-| Tab I | model seçimi (3 mimari) | bitirme Tablo 5.4 + sweep | parametre/süre eksik |
+| Tab I | model seçimi: CNN-30s, CNN-LSTM-30s, TranSensFusers-10s, **deployed CNN-10s**; sütunlar: window · rate · protocol · acc · F1 · params · inference ms | bitirme Tablo 5.4 + 25 Eyl ölçümü | ✅ transformer 1.86M / 103.7 ms; CNN 49.9K / 3.63 ms. CNN-LSTM parametresi yok → "—" |
 | Tab II | yerleşim donanımı | JSON `server_hardware` | ✅ |
 | Tab III | fog aşama dökümü × 5 | `04_fog` | ✅ |
 | Tab IV | hiç/seçici/hep | `04_fog` + `09_secici_xai` | ✅ |
@@ -346,32 +367,35 @@ Bu özetin her sayısı `results/` altındaki bir dosyaya işaret ediyor.
 
 ## BÖLÜM F — Yazmadan önce kapatılacak dört boşluk
 
-| # | boşluk | süre | zorunlu mu |
+| # | boşluk | süre | durum |
 |---|---|---|---|
-| F1 | TranSensFusers parametre sayısı + çıkarım süresi (Tablo I için) | 30 dk, bitirme kodu | **evet** — Z1'in cevabı |
-| F2 | Kanonik LOSO sayısı seçimi (B2) | 10 dk | **evet** |
+| F1 | TranSensFusers parametre + çıkarım süresi | — | ✅ **kapandı** (37.3× / 28.6×) |
+| F2 | Kanonik LOSO sayısı seçimi (B2) + transformer için "tek denek" ifadesi (B2-ek) | 10 dk | **sen karar ver** |
 | F3 | Fig 1 mimari diyagramı | 1–2 saat | **evet** |
-| F4 | Fog'u Docker'da (py3.11) tekrar koşup yığını eşitlemek | 25 dk + kurulum | hayır — sınırlılık cümlesi yeter |
-
-**F4 hakkında:** 1 Ekim'e altı gün varsa yapma, cümleyle geç. Son tarih
-daha ilerideyse yap; Z5 tamamen kapanır ve tablo temizlenir.
+| F4 | Fog'u Docker'da (py3.11) tekrar koşup yığını eşitlemek — 5 durum × 5 dk | ~25 dk + Docker kurulumu | **artık evet** — 20 gün var, Z5 tamamen kapanır |
+| F5 | `Transformer.ipynb` (3.7 MB) ve XAI not defterini depoya alıp almama kararı | 5 dk | senin kararın — tekrar üretilebilirlik için alınması iyi olur; `.dockerignore` zaten `*.ipynb`'yi imajdan dışlıyor |
 
 ---
 
-## BÖLÜM G — Çizelge (1 Ekim varsayımıyla)
+## BÖLÜM G — Çizelge (15 Ekim, 20 gün)
 
-| gün | iş |
+| tarih | iş |
 |---|---|
-| 25 Eyl | F1, F2, F3. `main_en.tex` iskeleti, boş bölümler, şekil yerleri. |
-| 26 Eyl | V. Results — altı alt bölüm. `tools/paper_tables.py`. |
-| 27 Eyl | III. System + IV. Setup. Tablo I, II. |
-| 28 Eyl | I. Intro + II. Related + Abstract. |
-| 29 Eyl | VI, VII, VIII. Kaynakça. Hocaya gönder. |
-| 30 Eyl | Hoca dönüşü, sayfa sınırı, dil. |
-| 1 Eki | Gönder. |
+| 25–26 Eyl | F2, F5 kararları. F3 Fig 1. `main_en.tex` iskeleti, `tools/paper_tables.py`. |
+| 27–28 Eyl | **F4:** fog düğümünde Docker (python:3.11) ile 5 XAI durumu yeniden; `04_fog` ve `07_edge_xai` tabloları aynı yığında. |
+| 29 Eyl–1 Eki | V. Results — altı alt bölüm, tablolar JSON'dan. |
+| 2–3 Eki | III. System + IV. Setup. Tablo I, II. |
+| 4–5 Eki | I. Intro + II. Related + Abstract. |
+| 6 Eki | VI, VII, VIII. Kaynakça. **Hocaya ilk tam taslak.** |
+| 7–10 Eki | Hoca dönüşü, düzeltmeler, dil. |
+| 11–12 Eki | Tam okuma, sayfa sınırı (6), şekil kalitesi, EDAS formatı. |
+| 13 Eki | Hocaya son sürüm. |
+| 14 Eki | Son düzeltme. |
+| **15 Eki** | **EDAS'a yükle.** Son güne bırakma; EDAS sunucusu son saatlerde yavaşlar. |
 
-**Kural:** 26 Eylül'den sonra yeni ölçüm yok (F4 hariç, o da yalnızca tarih
-uzaksa).
+**Kural:** F4 dışında yeni ölçüm yok. 1 Ekim'den sonra hiç yok.
+Boş kalan gün varsa Pareto şekline ya da S14 seçici koşusuna (5 dk) gider,
+yeni deney açılmaz.
 
 ---
 
