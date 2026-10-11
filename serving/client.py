@@ -16,6 +16,20 @@ Olculen metrikler (makaledeki tanimlarla birebir):
 sistem gercek sensor hizinda yuklenir ve kuyruk gecikmesi anlam kazanir.
 Verilmezse mumkun oldugunca hizli gonderilir (dayanikliik/throughput testi).
 
+ACIK / KAPALI DONGU (--loop)
+----------------------------
+    open   : gonderici ve alici ayri gorevler. Tick'ler cevabi BEKLEMEDEN,
+             planlanan zamanda gider (gercek sensor durmaz). Gercek zamanli
+             kosularin varsayilani.
+    closed : gonder -> cevabi bekle -> sonraki tick. Cevap tick'ten uzun
+             surerse (XAI acikken 0.4-1.4 s) istemci akisi durdurur ve
+             gecikmis tick'leri patlama halinde yollar; kuyruk gecikmesi
+             olcumden duser ("coordinated omission"). v1 kosulari bu kipteydi.
+             Hizli (realtime olmayan) kosularin varsayilani.
+Her paket icin send_lag = t_send - t_planlanan kaydedilir; kapali dongude
+bu deger akisin ne kadar durdugunu, acik dongude istemcinin programa
+uyup uymadigini gosterir.
+
 Calistirma:
     python -m serving.client --subject S11 --realtime --tag c1
 """
@@ -127,7 +141,246 @@ def format_live_line(rec, n_pred, warmup_windows):
             f"hesap {rec['execution_ms']:6.1f} ms{xai_txt}{warm}")
 
 
+def loop_mode(args):
+    """--loop verilmediyse: realtime -> open, degilse closed."""
+    mode = getattr(args, 'loop', None)
+    if mode in ('open', 'closed'):
+        return mode
+    return 'open' if getattr(args, 'realtime', False) else 'closed'
+
+
+def _build_record(rep, t_send, t_sched, t_reply, msg_id, tick_s, cfg, raw_labels):
+    """Tek cevaptan olcum kaydi. Iki dongu kipi de ayni kaydi uretir."""
+    rec = {
+        'msg_id': rep['msg_id'],
+        'predicted': rep['predicted'],
+        # Yalnizca latency saat farki duzeltmesi ister; digerleri ayni
+        # saatten. Latency kosu bitince, o ana ait saat farkiyla
+        # hesaplanir; ham damgalar bu yuzden saklanir.
+        't_send_ns': t_send,
+        't_recv_ns': rep['t_recv'],
+        'queuing_ms':   (rep['t_start'] - rep['t_recv']) / 1e6,
+        'execution_ms': (rep['t_end']   - rep['t_start']) / 1e6,
+        'response_ms':  (t_reply - t_send) / 1e6,
+        'send_lag_ms':  (t_send - t_sched) / 1e6,
+        # Sensorun bu veriyi urettigi (planlanan) andan karara kadar gecen
+        # sure. Kapali dongude response, akisin durdugu sureyi gizler; age
+        # gizlemez (coordinated omission duzeltmesi).
+        'age_ms':       (t_reply - t_sched) / 1e6,
+    }
+    if rep['predicted']:
+        # Pencerenin kapsadigi araligin cogunluk etiketi (yalniz raporlama icin;
+        # sunucu etiketi hic gormez)
+        elapsed_s = (msg_id + 1) * tick_s
+        end_i = int(round(elapsed_s * LABEL_RATE))
+        start_i = int(round((elapsed_s - cfg.WINDOW_DURATION) * LABEL_RATE))
+        span = raw_labels[max(0, start_i):min(end_i, len(raw_labels))]
+        if len(span):
+            majority = int(np.bincount(span.astype(int)).argmax())
+            if majority in cfg.VALID_LABELS:
+                rec['true_label'] = 1 if majority == 2 else 0
+            else:
+                rec['true_label'] = -1     # gecersiz etiketli pencere
+        rec['pred_label'] = rep['pred']
+        rec['confidence'] = rep['confidence']
+        rec['stages'] = rep.get('stages')
+        rec['explained'] = bool(rep.get('explained', False))
+    return rec
+
+
 async def run_client(args, cfg, streams, raw_labels, client_id):
+    if loop_mode(args) == 'open':
+        return await _run_client_open(args, cfg, streams, raw_labels, client_id)
+    return await _run_client_closed(args, cfg, streams, raw_labels, client_id)
+
+
+async def _run_client_open(args, cfg, streams, raw_labels, client_id):
+    """Acik dongu: gonderici programa gore yollar, alici cevaplari ayri toplar.
+
+    Saat olcumu de alici uzerinden yapilir: hatta cevaplar akarken PONG'u
+    baska bir gorev okuyamaz. PING sunucuda kuyruga girmez, ama tel uzerinde
+    buyuk bir veri paketinin arkasinda kalabilir; en dusuk RTT'li tur
+    secildigi icin bu etki elenir.
+    """
+    per_tick = P.samples_per_tick(NATIVE_STREAMS, args.tick_ms)
+    tick_s = args.tick_ms / 1000.0
+    tick_ns = int(args.tick_ms * 1e6)
+
+    n_ticks = min(len(streams[name]) // per_tick[name]
+                  for name, _, _ in NATIVE_STREAMS if per_tick[name] > 0)
+    if args.max_ticks:
+        n_ticks = min(n_ticks, args.max_ticks)
+
+    reader, writer = await asyncio.open_connection(args.host, args.port)
+    writer.write(P.pack_hello({'client_id': client_id, 'subject': args.subject,
+                               'tick_ms': args.tick_ms, 'norm_mode': args.norm_mode,
+                               'loop': 'open'}))
+    await writer.drain()
+
+    # Baslangic olcumu alici baslamadan yapilir; hatta henuz veri yok.
+    resync_every_s = float(getattr(args, 'clock_resync_s', CLOCK_RESYNC_S) or 0.0)
+    clock_offset, clock_rtt = await P.measure_clock_offset(reader, writer)
+    clock_samples = [{'t_local_ns': time.perf_counter_ns(),
+                      'offset_ns': clock_offset, 'rtt_ns': clock_rtt}]
+
+    tag = f"[{args.subject}]"
+    eta = f", tahmini {n_ticks * tick_s / 60:.1f} dk" if args.realtime else ""
+    print(f"{tag} baglandi (acik dongu), {n_ticks} tick gonderilecek{eta}", flush=True)
+
+    loop = asyncio.get_running_loop()
+    pending = {}                       # msg_id -> (t_send_ns, t_sched_ns)
+    records = []
+    counters = {'sent': 0, 'recv': 0, 'n_pred': 0, 'max_inflight': 0}
+    drained = asyncio.Event()
+    send_done = False
+    pong = {'fut': None}
+    stats_fut = loop.create_future()
+    live = getattr(args, 'live', False)
+    warmup_windows = getattr(args, 'warmup_windows', 0)
+
+    async def receiver():
+        while True:
+            try:
+                body = await P.read_frame(reader)
+            except (asyncio.IncompleteReadError, ConnectionResetError):
+                body = None
+            t_now = time.perf_counter_ns()
+            if body is None:
+                drained.set()
+                if not stats_fut.done():
+                    stats_fut.set_result(None)
+                return
+            mtype = P.msg_type(body)
+            if mtype == P.TYPE_REPLY:
+                counters['recv'] += len(body) + P.HEADER.size
+                rep = P.unpack_reply(body)
+                mid = rep['msg_id']
+                t_send, t_sched = pending.pop(mid)
+                rec = _build_record(rep, t_send, t_sched, t_now, mid, tick_s,
+                                    cfg, raw_labels)
+                records.append(rec)
+                if rec['predicted']:
+                    counters['n_pred'] += 1
+                    if live:
+                        print(format_live_line(rec, counters['n_pred'],
+                                               warmup_windows), flush=True)
+                if send_done and not pending:
+                    drained.set()
+            elif mtype == P.TYPE_PONG:
+                fut = pong['fut']
+                if fut is not None and not fut.done():
+                    fut.set_result((body, t_now))
+            elif mtype == P.TYPE_STATS:
+                if not stats_fut.done():
+                    stats_fut.set_result(P.unpack_stats(body))
+
+    async def resync(rounds=4):
+        best = None
+        for _ in range(rounds):
+            pong['fut'] = loop.create_future()
+            t1 = time.perf_counter_ns()
+            writer.write(P.pack_ping(t1))
+            await writer.drain()
+            try:
+                body, t3 = await asyncio.wait_for(pong['fut'], timeout=10.0)
+            except asyncio.TimeoutError:
+                continue
+            _, t2 = P.unpack_pong(body)
+            rtt = t3 - t1
+            if best is None or rtt < best[1]:
+                best = (((t2 - t1) + (t2 - t3)) // 2, rtt)
+        if best is not None and best[1] > 0:
+            clock_samples.append({'t_local_ns': time.perf_counter_ns(),
+                                  'offset_ns': best[0], 'rtt_ns': best[1]})
+
+    recv_task = asyncio.create_task(receiver())
+
+    t_wall0 = time.perf_counter()
+    t0_ns = time.perf_counter_ns()
+    PROGRESS_EVERY_S = 10.0
+    t_next_progress = t_wall0 + PROGRESS_EVERY_S
+    t_next_resync = (t_wall0 + resync_every_s) if resync_every_s > 0 else float('inf')
+    cursor = {name: 0 for name, _, _ in NATIVE_STREAMS}
+
+    for msg_id in range(n_ticks):
+        t_sched = t0_ns + msg_id * tick_ns if args.realtime else time.perf_counter_ns()
+        if args.realtime:
+            delay = (t_sched - time.perf_counter_ns()) / 1e9
+            if delay > 0:
+                await asyncio.sleep(delay)
+
+        chunks = {}
+        for name, _, _ in NATIVE_STREAMS:
+            k = per_tick[name]
+            c = cursor[name]
+            chunks[name] = streams[name][c:c + k]
+            cursor[name] = c + k
+
+        t_send = time.perf_counter_ns()
+        packet = P.pack_data(msg_id, t_send, chunks, NATIVE_STREAMS)
+        pending[msg_id] = (t_send, t_sched)
+        writer.write(packet)
+        await writer.drain()
+        counters['sent'] += len(packet)
+        counters['max_inflight'] = max(counters['max_inflight'], len(pending))
+
+        now = time.perf_counter()
+        if now >= t_next_progress:
+            t_next_progress = now + PROGRESS_EVERY_S
+            done = msg_id + 1
+            left = (f", kalan ~{(n_ticks - done) * tick_s / 60:.1f} dk"
+                    if args.realtime else "")
+            print(f"{tag} tick {done}/{n_ticks} (%{100 * done / n_ticks:.0f}), "
+                  f"yolda {len(pending)} paket{left}", flush=True)
+        if now >= t_next_resync:
+            t_next_resync = now + resync_every_s
+            await resync()
+
+    send_done = True
+    if pending:
+        # Son aciklamalarin bitmesini bekle. Aciklama hop'tan uzunsa (Pi'de
+        # SHAP) kuyruk dogrusal buyur ve gonderim bittikten sonra da uzun sure
+        # bosalir; bu sure olcumun parcasi oldugu icin comert tutulur.
+        try:
+            await asyncio.wait_for(drained.wait(), timeout=max(300.0, 3 * n_ticks * tick_s))
+        except asyncio.TimeoutError:
+            print(f"{tag} [!] {len(pending)} cevap gelmedi, kayitlardan dusuldu", flush=True)
+
+    if resync_every_s > 0 and len(clock_samples) > 1:
+        await resync()
+
+    records.sort(key=lambda r: r['msg_id'])
+    for rec in records:
+        off = _offset_at(rec['t_send_ns'], clock_samples)
+        rec['latency_ms'] = ((rec['t_recv_ns'] - off) - rec['t_send_ns']) / 1e6
+
+    writer.write(P.pack_bye())
+    await writer.drain()
+    try:
+        server_stats = await asyncio.wait_for(stats_fut, timeout=5.0)
+    except asyncio.TimeoutError:
+        server_stats = None
+    recv_task.cancel()
+    try:
+        await recv_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    writer.close()
+    try:
+        await writer.wait_closed()
+    except Exception:
+        pass
+
+    wall_s = time.perf_counter() - t_wall0
+    clock = _clock_report(clock_samples, resync_every_s)
+    clock['loop'] = 'open'
+    clock['max_inflight'] = counters['max_inflight']
+    clock['lost_replies'] = len(pending)
+    return records, counters['sent'], counters['recv'], wall_s, clock, server_stats
+
+
+async def _run_client_closed(args, cfg, streams, raw_labels, client_id):
     per_tick = P.samples_per_tick(NATIVE_STREAMS, args.tick_ms)
     tick_s = args.tick_ms / 1000.0
 
@@ -162,8 +415,9 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
     records = []
     bytes_sent = bytes_recv = 0
     cursor = {name: 0 for name, _, _ in NATIVE_STREAMS}
-    elapsed_s = 0.0
     t_wall0 = time.perf_counter()
+    t0_ns = time.perf_counter_ns()
+    tick_ns = int(args.tick_ms * 1e6)
     PROGRESS_EVERY_S = 10.0
     t_next_progress = t_wall0 + PROGRESS_EVERY_S
     n_pred = 0                     # --live satirlarini numaralandirmak icin
@@ -176,9 +430,11 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
             c = cursor[name]
             chunks[name] = streams[name][c:c + k]
             cursor[name] = c + k
-        elapsed_s += tick_s
 
         t_send = time.perf_counter_ns()
+        # Planlanan an: gercek sensor bu paketi ne zaman uretirdi. Kapali
+        # dongude send_lag akisin cevap beklerken ne kadar durdugunu gosterir.
+        t_sched = t0_ns + msg_id * tick_ns if args.realtime else t_send
         packet = P.pack_data(msg_id, t_send, chunks, NATIVE_STREAMS)
         writer.write(packet)
         await writer.drain()
@@ -191,35 +447,8 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
         bytes_recv += len(body) + P.HEADER.size
         rep = P.unpack_reply(body)
 
-        rec = {
-            'msg_id': rep['msg_id'],
-            'predicted': rep['predicted'],
-            # Yalnizca latency saat farki duzeltmesi ister; digerleri ayni
-            # saatten. Latency kosu bitince, o ana ait saat farkiyla
-            # hesaplanir; ham damgalar bu yuzden saklanir.
-            't_send_ns': t_send,
-            't_recv_ns': rep['t_recv'],
-            'queuing_ms':   (rep['t_start'] - rep['t_recv']) / 1e6,
-            'execution_ms': (rep['t_end']   - rep['t_start']) / 1e6,
-            'response_ms':  (t_reply - t_send) / 1e6,
-        }
+        rec = _build_record(rep, t_send, t_sched, t_reply, msg_id, tick_s, cfg, raw_labels)
         if rep['predicted']:
-            # Pencerenin kapsadigi araligin cogunluk etiketi (yalniz raporlama icin;
-            # sunucu etiketi hic gormez)
-            end_i = int(round(elapsed_s * LABEL_RATE))
-            start_i = int(round((elapsed_s - cfg.WINDOW_DURATION) * LABEL_RATE))
-            span = raw_labels[max(0, start_i):min(end_i, len(raw_labels))]
-            if len(span):
-                majority = int(np.bincount(span.astype(int)).argmax())
-                if majority in cfg.VALID_LABELS:
-                    rec['true_label'] = 1 if majority == 2 else 0
-                else:
-                    rec['true_label'] = -1     # gecersiz etiketli pencere
-            rec['pred_label'] = rep['pred']
-            rec['confidence'] = rep['confidence']
-            rec['stages'] = rep.get('stages')
-            rec['explained'] = bool(rep.get('explained', False))
-
             n_pred += 1
             if getattr(args, 'live', False):
                 print(format_live_line(rec, n_pred,
@@ -287,7 +516,16 @@ async def run_client(args, cfg, streams, raw_labels, client_id):
 
     wall_s = time.perf_counter() - t_wall0
     clock = _clock_report(clock_samples, resync_every_s)
+    clock['loop'] = 'closed'
     return records, bytes_sent, bytes_recv, wall_s, clock, server_stats
+
+
+def _first_measured_id(records, warmup_windows):
+    """Isinma bittikten sonraki ilk paketin msg_id'si."""
+    preds = [r for r in records if r['predicted']]
+    if len(preds) <= warmup_windows:
+        return float('inf')
+    return preds[warmup_windows - 1]['msg_id'] + 1 if warmup_windows else 0
 
 
 def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
@@ -309,6 +547,7 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
         }
 
     out = {
+        'loop': (clock or {}).get('loop', 'closed'),
         'clock_sync': clock,
         'server': server_stats,
         'n_packets': len(records),
@@ -321,6 +560,14 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
             'queuing':   stat([r['queuing_ms'] for r in live]),
             'execution': stat([r['execution_ms'] for r in live]),
             'response':  stat([r['response_ms'] for r in live]),
+            # Isinma dahil TUM paketler: akis durmasi (kapali dongu) ya da
+            # programdan sapma (acik dongu) herhangi bir anda olabilir.
+            'send_lag':  stat([r['send_lag_ms'] for r in records if 'send_lag_ms' in r]),
+            'age':       stat([r['age_ms'] for r in live if 'age_ms' in r]),
+            # Tahmin uretmeyen ara paketler dahil: aciklama surerken gelen
+            # paketlerin bekledigi sure yalnizca burada gorunur.
+            'queuing_all': stat([r['queuing_ms'] for r in records
+                                 if r['msg_id'] >= _first_measured_id(records, warmup_windows)]),
         },
         'bandwidth': {
             'bytes_sent': bytes_sent,
@@ -329,6 +576,18 @@ def summarize(records, bytes_sent, bytes_recv, wall_s, warmup_windows, cfg,
             'kbps_recv': bytes_recv * 8 / 1000.0 / wall_s if wall_s else 0.0,
             'kbps_total': (bytes_sent + bytes_recv) * 8 / 1000.0 / wall_s if wall_s else 0.0,
         },
+    }
+
+    # Pencere bazli ham degerler: cok istemcili havuzlama, CDF ve istatistik
+    # testleri ozetten degil bunlardan yapilir.
+    out['raw'] = {
+        'latency_ms':   [r['latency_ms'] for r in live],
+        'queuing_ms':   [r['queuing_ms'] for r in live],
+        'execution_ms': [r['execution_ms'] for r in live],
+        'response_ms':  [r['response_ms'] for r in live],
+        'xai_ms':       [(r.get('stages') or {}).get('xai') for r in live],
+        'confidence':   [r.get('confidence') for r in live],
+        'explained':    [bool(r.get('explained')) for r in live],
     }
 
     # Sunucu ici asama dokumu
@@ -384,8 +643,10 @@ def print_summary(s, title=""):
           f"{s['n_warmup_excluded']} warm-up haric, {s['n_packets']} paket)")
     print(f"   {'metrik':>14} {'ort':>9} {'medyan':>9} {'p95':>9} {'p99':>9} {'jitter':>9}")
     for key, label in [('latency', 'latency'), ('queuing', 'queuing delay'),
-                       ('execution', 'execution'), ('response', 'response time')]:
-        v = m[key]
+                       ('execution', 'execution'), ('response', 'response time'),
+                       ('age', 'sensor age'), ('queuing_all', 'queue (all)'),
+                       ('send_lag', 'send lag')]:
+        v = m.get(key)
         if v:
             print(f"   {label:>14} {v['mean_ms']:>9.3f} {v['median_ms']:>9.3f} "
                   f"{v['p95_ms']:>9.3f} {v['p99_ms']:>9.3f} {v['jitter_mean_abs_delta_ms']:>9.3f}")
@@ -466,6 +727,8 @@ def main():
                              "olculen metrikleri etkilemez)")
     parser.add_argument('--clock-resync-s', type=float, default=CLOCK_RESYNC_S,
                         help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
+    parser.add_argument('--loop', choices=('open', 'closed'), default=None,
+                        help="Yuk uretimi: open (realtime varsayilani) ya da closed")
     parser.add_argument('--tag', default='client')
     args = parser.parse_args()
 
@@ -480,7 +743,7 @@ def main():
     s = summarize(records, bs, br, wall, args.warmup_windows, cfg, clock, srv)
     s['config'] = {'subject': args.subject, 'tick_ms': args.tick_ms,
                    'norm_mode': args.norm_mode, 'realtime': args.realtime,
-                   'host': args.host, 'port': args.port, 'client_id': client_id}
+                   'loop': loop_mode(args), 'host': args.host, 'port': args.port, 'client_id': client_id}
     print_summary(s, title=f"{args.subject} @ {args.host}:{args.port}")
 
     path = os.path.join(cfg.RESULTS_DIR, f'client_{args.tag}.json')

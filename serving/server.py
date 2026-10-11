@@ -65,7 +65,19 @@ def hardware_info():
         'torch': torch.__version__,
         'cpu_count': os.cpu_count(),
         'torch_threads': torch.get_num_threads(),
+        'numpy': np.__version__,
+        # Konteynerde mi: yigin esitligi iddiasinin kaniti bu alan.
+        'in_container': os.path.exists('/.dockerenv'),
+        'image_tag': os.environ.get('WESAD_IMAGE_TAG'),
     }
+    # Surum paket meta verisinden okunur; import edilseydi XAI'siz kosunun
+    # bellek tabani shap'in yuku kadar sisecekti.
+    from importlib import metadata as _md
+    for dist in ('shap', 'scikit-learn'):
+        try:
+            info[dist] = _md.version(dist)
+        except Exception:
+            info[dist] = None
     for path, key in [('/proc/device-tree/model', 'device_model')]:
         try:
             with open(path) as f:
@@ -128,8 +140,14 @@ def local_addresses():
     return sorted(addrs, key=rank)
 
 
-def resource_summary(sampler):
-    """Ornekleyiciden CPU ve bellek ozeti.
+def resource_summary(sampler, start=0):
+    """Ornekleyiciden CPU ve bellek ozeti, YALNIZCA bu oturumun penceresi.
+
+    Ornekleyici sunucu acildigindan beri calisir. Uzak sunucu birden fazla
+    kosu boyunca acik kaldiginda (compare_deployments'in 3 turu) tum gecmisi
+    ozetlemek, oturumlar arasi bosta gecen sureyi CPU ortalamasina katar ve
+    yerel (her turda yeniden baslatilan) sunucuyla karsilastirmayi bozar.
+    `start`, oturum baslarken ornek listesinin uzunlugudur.
 
     process_cpu_percent cok cekirdekli makinede 100'u asabilir (her cekirdek
     %100 sayilir); system_cpu_percent tum makinenin yuzdesidir. Makaledeki
@@ -137,25 +155,64 @@ def resource_summary(sampler):
     """
     import numpy as _np
     out = {}
-    if sampler and sampler.cpu:
-        c = _np.array(sampler.cpu)
+    cpu = sampler.cpu[start:] if sampler else []
+    rss = sampler.rss[start:] if sampler else []
+    if cpu:
+        c = _np.array(cpu)
         out['process_cpu_percent'] = {'mean': float(c.mean()), 'max': float(c.max()),
                                       'p95': float(_np.percentile(c, 95)),
                                       'n_samples': int(len(c))}
-    if sampler and sampler.rss:
-        r = _np.array(sampler.rss)
+    if rss:
+        r = _np.array(rss)
         out['process_rss_mb'] = {'mean': float(r.mean()), 'max': float(r.max())}
     if _HAS_PSUTIL:
         try:
             vm = psutil.virtual_memory()
             out['system_cpu_percent'] = psutil.cpu_percent(interval=None)
             out['system_memory_percent'] = vm.percent
-            if sampler and sampler.rss:
+            if rss:
                 out['process_memory_percent'] = round(
-                    max(sampler.rss) / (vm.total / (1024 ** 2)) * 100, 2)
+                    max(rss) / (vm.total / (1024 ** 2)) * 100, 2)
         except Exception:
             pass
     return out
+
+
+def _read_first(paths):
+    for p in paths:
+        try:
+            with open(p) as f:
+                return f.read().strip()
+        except Exception:
+            continue
+    return None
+
+
+def thermal_snapshot():
+    """Sicaklik, frekans kisma ve governor: kaynak kisitli dugumde (Pi)
+    olcumu sessizce bozan uc etken. Oturum basinda ve sonunda kaydedilir.
+
+    get_throttled bit 0-3 su an, 16-19 acilistan beri: alt-gerilim, frekans
+    siniri, kisma, yumusak sicaklik siniri. 0x0 disindaki her deger raporda
+    belirtilmeli. Bulunamayan alan None kalir (x86 masaustunde normal).
+    """
+    snap = {}
+    t = _read_first(['/sys/class/thermal/thermal_zone0/temp'])
+    try:
+        snap['cpu_temp_c'] = round(int(t) / 1000.0, 1) if t else None
+    except ValueError:
+        snap['cpu_temp_c'] = None
+    snap['throttled'] = _read_first([
+        '/sys/devices/platform/soc/soc:firmware/get_throttled',
+        '/sys/devices/platform/soc/soc:firmware/raspberrypi-hwmon/get_throttled'])
+    snap['governor'] = _read_first(
+        ['/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor'])
+    f = _read_first(['/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq'])
+    try:
+        snap['cpu_mhz_now'] = int(f) / 1000.0 if f else None
+    except ValueError:
+        snap['cpu_mhz_now'] = None
+    return snap
 
 
 #: --xai-method ile secilebilen aciklayicilar. Iki maliyet noktasi kasitli:
@@ -263,6 +320,9 @@ class ClientSession:
         self.n_windows = 0
         self.n_packets = 0
         self.n_explained = 0
+        self.loop = hello.get('loop', 'closed')
+        self.sample_start = 0          # kaynak ornekleyicide oturumun baslangici
+        self.thermal_start = None
 
 
 async def worker(state):
@@ -365,6 +425,9 @@ async def handle_client(reader, writer, state):
         return
     hello = json.loads(body[1:].decode('utf-8'))
     sess = ClientSession(cfg, hello, state['mean'], state['std'], writer=writer)
+    sampler = state.get('sampler')
+    sess.sample_start = len(sampler.cpu) if sampler else 0
+    sess.thermal_start = thermal_snapshot()
     state['sessions'] += 1
     state['sessions_peak'] = max(state.get('sessions_peak', 0), state['sessions'])
     print(f"[+] istemci baglandi: {sess.client_id} (subject={sess.subject}, "
@@ -399,7 +462,12 @@ async def handle_client(reader, writer, state):
                             pass
                     writer.write(P.pack_stats({
                         'hardware': state['hardware'],
-                        'resources': resource_summary(state.get('sampler')),
+                        'resources': resource_summary(state.get('sampler'),
+                                                      start=sess.sample_start),
+                        'resources_scope': 'session',
+                        'thermal': {'start': sess.thermal_start,
+                                    'end': thermal_snapshot()},
+                        'client_loop': sess.loop,
                         'sessions_peak': state.get('sessions_peak', 1),
                         'xai': xai_info,
                     }))
@@ -471,10 +539,9 @@ async def main_async(args):
 
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
              'explainer': explainer, 'xai_threshold': args.xai_threshold,
+             'xai_method': args.xai_method, 'xai_warmup_ms': warmup_ms,
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
-             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler,
-             'explainer': explainer, 'xai_threshold': args.xai_threshold,
-             'xai_method': args.xai_method, 'xai_warmup_ms': warmup_ms}
+             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler}
 
     asyncio.create_task(worker(state))
 
@@ -500,7 +567,13 @@ async def main_async(args):
     else:
         print(f"XAI          : kapali (--xai-method none)")
     print(f"Mimari       : acik istek kuyrugu + tek worker")
-    print(f"XAI          : {args.xai_method} (threshold={args.xai_threshold})")
+    th = thermal_snapshot()
+    if any(v is not None for v in th.values()):
+        print(f"Termal       : {th.get('cpu_temp_c')} C | governor {th.get('governor')} "
+              f"| throttled {th.get('throttled')}")
+        if th.get('governor') not in (None, 'performance'):
+            print("[!] governor 'performance' degil; frekans olcekleme "
+                  "olcumu oynatir.")
     print("=" * 66)
     if args.host in ('0.0.0.0', '::'):
         addrs = local_addresses()

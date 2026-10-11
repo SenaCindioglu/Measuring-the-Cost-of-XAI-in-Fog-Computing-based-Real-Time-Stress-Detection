@@ -94,6 +94,7 @@ def aggregate(summaries):
         return summaries[0]
 
     agg = {'n_clients': len(summaries),
+           'loop': summaries[0].get('loop'),
            'n_packets': sum(s['n_packets'] for s in summaries),
            'n_predictions': sum(s['n_predictions'] for s in summaries),
            'n_measured': sum(s['n_measured'] for s in summaries),
@@ -101,7 +102,8 @@ def aggregate(summaries):
            'wall_seconds': max(s['wall_seconds'] for s in summaries),
            'metrics': {}, 'per_client': summaries}
 
-    for key in ['latency', 'queuing', 'execution', 'response']:
+    for key in ['latency', 'queuing', 'execution', 'response', 'send_lag',
+                'age', 'queuing_all']:
         vals = [s['metrics'][key] for s in summaries if s['metrics'].get(key)]
         if not vals:
             continue
@@ -140,6 +142,28 @@ def aggregate(summaries):
     if stages:
         agg['server_stages'] = stages
 
+    # Havuzlanmis istatistik: tum istemcilerin pencereleri tek dagilim.
+    # Yukaridaki 'metrics' istemci ozetlerinin ozeti (medyanlarin medyani,
+    # en kotu istemcinin p95'i); makaleye girecek olan bu havuz.
+    raws = [s.get('raw') for s in summaries if s.get('raw')]
+    if raws:
+        pooled = {}
+        for key in ['latency', 'queuing', 'execution', 'response']:
+            v = np.array([x for r in raws for x in r[f'{key}_ms']], dtype=float)
+            if len(v):
+                pooled[key] = {'n': int(len(v)), 'mean_ms': float(v.mean()),
+                               'median_ms': float(np.median(v)),
+                               'p95_ms': float(np.percentile(v, 95)),
+                               'p99_ms': float(np.percentile(v, 99)),
+                               'max_ms': float(v.max())}
+        agg['pooled'] = pooled
+        expl = [e for r in raws for e in r['explained']]
+        xv = [x for r in raws for x in r['xai_ms'] if x is not None]
+        agg['xai'] = {'n_explained': int(sum(expl)), 'n_windows': len(expl),
+                      'explain_rate': (sum(expl) / len(expl)) if expl else 0.0,
+                      'mean_ms_per_window': (sum(xv) / len(expl)) if expl else 0.0,
+                      'mean_ms_per_explanation': (sum(xv) / len(xv)) if xv else None}
+
     cls = [s['classification'] for s in summaries if 'classification' in s]
     if cls:
         cm = {k: sum(c['confusion'][k] for c in cls) for k in ['tn', 'fp', 'fn', 'tp']}
@@ -171,7 +195,7 @@ def main():
     parser.add_argument('--tick-ms', type=int, default=cfg.DEFAULT_TICK_MS)
     parser.add_argument('--warmup-windows', type=int, default=cfg.DEFAULT_WARMUP_WINDOWS)
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
-    parser.add_argument('--realtime', '--live', dest='realtime', action='store_true',
+    parser.add_argument('--realtime', dest='realtime', action='store_true',
                         help="Sensor gercek hizinda gonder (kuyruk gecikmesi ancak boyle anlamli)")
     parser.add_argument('--max-ticks', type=int, default=0)
     parser.add_argument('--live', action='store_true',
@@ -188,6 +212,9 @@ def main():
     parser.add_argument('--clock-resync-s', type=float, default=60.0,
                         help="Saat farki kac saniyede bir yeniden olculsun "
                              "(0 = yalnizca baslangicta; uzun kosularda latency kayar)")
+    parser.add_argument('--loop', choices=('open', 'closed'), default=None,
+                        help="Yuk uretimi: open (realtime varsayilani; tick'ler "
+                             "cevabi beklemez) ya da closed (v1 davranisi)")
     parser.add_argument('--tag', default='fog')
     args = parser.parse_args()
 
@@ -246,6 +273,7 @@ def main():
                                realtime=args.realtime, max_ticks=args.max_ticks,
                                clock_resync_s=args.clock_resync_s,
                                warmup_windows=args.warmup_windows,
+                               loop=args.loop,
                                # --live yalnizca TEK istemcide anlamli: birden
                                # fazla istemci ayni anda yazarsa satirlar
                                # birbirine karisir ve okunmaz hale gelir.
@@ -270,6 +298,9 @@ def main():
             'server': f'{host}:{args.port}', 'local_server': local_server,
             'clock_synced': local_server, 'total_wall_s': wall,
             'clock_resync_s': args.clock_resync_s,
+            'loop': agg.get('loop') or (summaries[0].get('loop') if summaries else None),
+            'xai_method': args.xai_method if local_server else None,
+            'xai_threshold': args.xai_threshold if local_server else None,
         }
 
         print_summary(agg, title=f"{n_clients} istemci, toplam {wall:.1f} s")

@@ -322,7 +322,7 @@ Erzurumluoğlu ve ark., ICACT 2025.
 |---|---|---|
 | DREAMER, duygu | WESAD, stres | farklı görev, aynı sistem metodolojisi |
 | 3 s pencere, 24 öznitelik, saniyede bir | 10 s pencere, ham sinyal, 5 s'de bir | pencere gecikmesi bizde uzun, hesap ucuz; ayrı raporlanır |
-| Worker + broker Pi 4, Wi-Fi | tek fog düğümü, Wi-Fi ve Ethernet | broker tek worker'da gereksiz (onların sonucu: 43.9'a karşı 43.3 ms) |
+| Worker + broker Pi 4, Wi-Fi | **tek Pi 4 worker** (gerçek kaynak-kısıtlı düğüm) + co-located masaüstü, Ethernet | worker donanımı onlarla aynı sınıf; broker tek worker'da gereksiz (onların sonucu: 43.9'a karşı 43.3 ms), çok-worker IISEC'te |
 | Edge / fog / cloud | edge / fog (+ A6) | eksikse açıkça |
 | Yedi metrik | aynı yedi metrik, aynı tanımlar | yan yana tablo |
 | XAI yok | SHAP ve LIME maliyeti + seçici XAI | bizim eklediğimiz boyut |

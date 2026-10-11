@@ -2,7 +2,7 @@ services:
   stress-server:
     build:
       context: .
-    image: wesad-stress-server:latest
+    image: wesad-stress-server:v2
     container_name: wesad-stress-server
     restart: unless-stopped
     ports:

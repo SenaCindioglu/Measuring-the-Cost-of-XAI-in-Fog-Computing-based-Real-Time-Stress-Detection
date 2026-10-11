@@ -1,0 +1,266 @@
+{
+ "loop": "open",
+ "clock_sync": {
+  "offset_ns": -1335416778323718,
+  "rtt_ns": 1609100,
+  "uncertainty_ms": 0.80455,
+  "method": "periodik yeniden olcum + dogrusal ara deger",
+  "resync_every_s": 60.0,
+  "n_samples": 3,
+  "span_s": 89.5477257,
+  "rtt_min_ns": 1242500,
+  "rtt_max_ns": 2015600,
+  "drift_ns": -6246817,
+  "drift_ms": -6.246817,
+  "drift_ppm": -69.7596387978394,
+  "samples": [
+   {
+    "t_rel_s": 0.0,
+    "offset_ns": -1335416778323718,
+    "rtt_ns": 1242500
+   },
+   {
+    "t_rel_s": 60.0188765,
+    "offset_ns": -1335416782404765,
+    "rtt_ns": 2015600
+   },
+   {
+    "t_rel_s": 89.5477257,
+    "offset_ns": -1335416784570535,
+    "rtt_ns": 1609100
+   }
+  ],
+  "loop": "open",
+  "max_inflight": 1,
+  "lost_replies": 0
+ },
+ "server": {
+  "hardware": {
+   "platform": "Linux-6.18.34+rpt-rpi-v8-aarch64-with-glibc2.41",
+   "machine": "aarch64",
+   "processor": null,
+   "python": "3.13.5",
+   "torch": "2.14.1+cpu",
+   "cpu_count": 4,
+   "torch_threads": 1,
+   "device_model": "Raspberry Pi 4 Model B Rev 1.1",
+   "total_ram_mb": 3795.8,
+   "cpu_mhz_max": 1500.0
+  },
+  "resources": {
+   "process_cpu_percent": {
+    "mean": 0.41619289340101523,
+    "max": 16.0,
+    "p95": 4.0,
+    "n_samples": 1970
+   },
+   "process_rss_mb": {
+    "mean": 234.19665490164974,
+    "max": 244.85546875
+   },
+   "system_cpu_percent": 0.2,
+   "system_memory_percent": 10.1,
+   "process_memory_percent": 6.45
+  },
+  "sessions_peak": 1,
+  "xai": {
+   "method": "none",
+   "method_as_given": "none",
+   "threshold": 0.0,
+   "warmup_ms": null
+  }
+ },
+ "n_packets": 180,
+ "n_predictions": 17,
+ "n_measured": 2,
+ "n_warmup_excluded": 15,
+ "wall_seconds": 89.60622750013135,
+ "metrics": {
+  "latency": {
+   "mean_ms": 3.3925205,
+   "median_ms": 3.3925205,
+   "p95_ms": 4.018680875,
+   "p99_ms": 4.074339575000001,
+   "min_ms": 2.69678675,
+   "max_ms": 4.08825425,
+   "std_ms": 0.6957337500000003,
+   "jitter_mean_abs_delta_ms": 1.3914675000000005
+  },
+  "queuing": {
+   "mean_ms": 0.11963750000000001,
+   "median_ms": 0.11963750000000001,
+   "p95_ms": 0.12009605000000001,
+   "p99_ms": 0.12013681000000001,
+   "min_ms": 0.119128,
+   "max_ms": 0.120147,
+   "std_ms": 0.000509500000000003,
+   "jitter_mean_abs_delta_ms": 0.001019000000000006
+  },
+  "execution": {
+   "mean_ms": 22.104709,
+   "median_ms": 22.104709,
+   "p95_ms": 22.1751745,
+   "p99_ms": 22.1814381,
+   "min_ms": 22.026414,
+   "max_ms": 22.183004,
+   "std_ms": 0.07829500000000067,
+   "jitter_mean_abs_delta_ms": 0.15659000000000134
+  },
+  "response": {
+   "mean_ms": 26.8629,
+   "median_ms": 26.8629,
+   "p95_ms": 27.344939999999998,
+   "p99_ms": 27.387787999999997,
+   "min_ms": 26.3273,
+   "max_ms": 27.3985,
+   "std_ms": 0.5355999999999987,
+   "jitter_mean_abs_delta_ms": 1.0711999999999975
+  },
+  "send_lag": {
+   "mean_ms": 9.582102222222224,
+   "median_ms": 11.672,
+   "p95_ms": 19.714579999999998,
+   "p99_ms": 23.639971000000028,
+   "min_ms": -9.8163,
+   "max_ms": 28.0541,
+   "std_ms": 8.579923192993148,
+   "jitter_mean_abs_delta_ms": 6.581314525139665
+  },
+  "age": {
+   "mean_ms": 29.987050000000004,
+   "median_ms": 29.987050000000004,
+   "p95_ms": 38.454385,
+   "p99_ms": 39.207037,
+   "min_ms": 20.5789,
+   "max_ms": 39.3952,
+   "std_ms": 9.408150000000001,
+   "jitter_mean_abs_delta_ms": 18.816300000000002
+  },
+  "queuing_all": {
+   "mean_ms": 0.1152041,
+   "median_ms": 0.1161095,
+   "p95_ms": 0.12604160000000003,
+   "p99_ms": 0.16581391999999992,
+   "min_ms": 0.099424,
+   "max_ms": 0.175757,
+   "std_ms": 0.015785813162140238,
+   "jitter_mean_abs_delta_ms": 0.012992157894736841
+  }
+ },
+ "bandwidth": {
+  "bytes_sent": 2079540,
+  "bytes_recv": 25214,
+  "kbps_sent": 185.66031027224767,
+  "kbps_recv": 2.2510935414584248,
+  "kbps_total": 187.9114038137061
+ },
+ "raw": {
+  "latency_ms": [
+   2.69678675,
+   4.08825425
+  ],
+  "queuing_ms": [
+   0.120147,
+   0.119128
+  ],
+  "execution_ms": [
+   22.183004,
+   22.026414
+  ],
+  "response_ms": [
+   26.3273,
+   27.3985
+  ],
+  "xai_ms": [
+   null,
+   null
+  ],
+  "confidence": [
+   0.9570708274841309,
+   0.9638497233390808
+  ],
+  "explained": [
+   false,
+   false
+  ]
+ },
+ "server_stages": {
+  "resampling": {
+   "mean_ms": 4.965078499935771,
+   "median_ms": 4.965078499935771,
+   "p95_ms": 5.003194849768988,
+   "p99_ms": 5.006582969754163,
+   "min_ms": 4.922727000121085,
+   "max_ms": 5.007429999750457,
+   "std_ms": 0.04235149981468567,
+   "jitter_mean_abs_delta_ms": 0.08470299962937133
+  },
+  "preprocessing": {
+   "mean_ms": 1.0770225001124345,
+   "median_ms": 1.0770225001124345,
+   "p95_ms": 1.1121886502451162,
+   "p99_ms": 1.11531453025691,
+   "min_ms": 1.0379489999650104,
+   "max_ms": 1.1160960002598586,
+   "std_ms": 0.039073500147424056,
+   "jitter_mean_abs_delta_ms": 0.07814700029484811
+  },
+  "tensor_prep": {
+   "mean_ms": 0.4256699999132252,
+   "median_ms": 0.4256699999132252,
+   "p95_ms": 0.4277615998944384,
+   "p99_ms": 0.42794751989276847,
+   "min_ms": 0.4233459999340994,
+   "max_ms": 0.427993999892351,
+   "std_ms": 0.0023239999791258015,
+   "jitter_mean_abs_delta_ms": 0.004647999958251603
+  },
+  "inference": {
+   "mean_ms": 14.335040499872775,
+   "median_ms": 14.335040499872775,
+   "p95_ms": 14.366323149738491,
+   "p99_ms": 14.369103829726555,
+   "min_ms": 14.30028200002198,
+   "max_ms": 14.36979899972357,
+   "std_ms": 0.03475849985079549,
+   "jitter_mean_abs_delta_ms": 0.06951699970159098
+  },
+  "postprocessing": {
+   "mean_ms": 0.2480704999925365,
+   "median_ms": 0.2480704999925365,
+   "p95_ms": 0.24853714996879717,
+   "p99_ms": 0.248578629966687,
+   "min_ms": 0.24755200001891353,
+   "max_ms": 0.24858899996615946,
+   "std_ms": 0.0005184999736229656,
+   "jitter_mean_abs_delta_ms": 0.0010369999472459313
+  }
+ },
+ "xai": {
+  "n_explained": 0,
+  "n_windows": 2,
+  "explain_rate": 0.0,
+  "mean_ms_per_window": 0.0,
+  "mean_ms_per_explanation": null
+ },
+ "subject": "S11",
+ "config": {
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "tick_ms": 500,
+  "norm_mode": "running",
+  "realtime": true,
+  "threads": 1,
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "server": "192.168.1.12:9099",
+  "local_server": false,
+  "clock_synced": false,
+  "total_wall_s": 89.63775139977224,
+  "clock_resync_s": 60.0,
+  "loop": "open",
+  "xai_method": null,
+  "xai_threshold": null
+ }
+}

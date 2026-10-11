@@ -2,10 +2,21 @@
 
 Son düzenleme: 24 Eylül 2026.
 
-Klasörler ölçüm aşamasına göre numaralı. **Makaleye girecek sayılar yalnızca
-01–06 klasörlerinden alınır.** `eski_ve_hatali/` içindekiler ya geçersiz ya da
-daha sonraki bir koşuyla geçersizleşti; neden olduğu o klasörün kendi
-README'sinde yazılı.
+Klasörler ölçüm aşamasına göre numaralı. `eski_ve_hatali/` içindekiler ya
+geçersiz ya da daha sonraki bir koşuyla geçersizleşti; neden olduğu o
+klasörün kendi README'sinde yazılı.
+
+> **v1 / v2 ayrımı (11 Ekim 2026).** 01–13 klasörlerinin tamamı **v1**
+> protokolüyle ölçüldü: istemci **kapalı döngü** (cevap gelmeden sonraki
+> tick gönderilmiyordu), üç yerleşim **üç farklı yazılım yığınında**
+> (torch 2.8.0 / 2.14.0 / 2.14.0+cu130), XAI hücreleri **tek koşu**, uzak
+> sunucuda kaynak özeti oturum değil sunucu ömrü boyunca. Katman
+> karşılaştırmaları (05, 07, 13) ve çok istemcili yük (10, 13/cloud_load_4)
+> bu yüzden makalede **nihai sayı olarak kullanılmaz**; v2 koşuları
+> `15_v2/` altına gelecek (protokol: `docs/RUNBOOK_v2.md`). Tek yerleşim
+> içindeki bulgular (04 içi oranlar, 08 kalibrasyon, 09 seçici XAI, 11
+> kalite) yöntemden bağımsız olduğu için geçerliliğini koruyor.
+> Makale sayıları elle değil `tools/paper_numbers.py` ile üretilir.
 
 Yeni koşular `results/` kökünde oluşur (script'ler oraya yazıyor). Koşu
 bittikten sonra ilgili klasöre taşı, yoksa kök yeniden karışır.
@@ -93,10 +104,12 @@ eklenmeli, yoksa dosya adı değişirse bilgi kaybolur.
 
 | Dosya | Ne | Sonuç |
 |---|---|---|
-| `deployments_edge_vs_fog.json` | 3 tur dönüşümlü, S11, 600 tick, XAI yok | ortak yerleşim: latency 0.81, execution 6.19, response 7.44 ms · fog: latency 3.69, execution 3.61, response 9.97 ms · ikisinde de 187 kbps |
+| `deployments_edge_vs_fog.json` | 3 tur dönüşümlü, S11, 600 tick, XAI yok | ortak yerleşim: latency 0.928, execution 6.344, response 7.880 ms · fog: latency 4.910, execution 3.372, response 10.151 ms · ikisinde de 187 kbps (tur medyanlarının medyanı) |
 
-Fog düğümünün hesabı daha hızlı yaptığı buradan çıkıyor (3.61'e karşı
-6.19 ms): ortak yerleşimde istemci ve sunucu aynı işlemciyi paylaşıyor.
+Fog düğümünün hesabı daha hızlı yaptığı buradan çıkıyor (3.37'ye karşı
+6.34 ms): ortak yerleşimde istemci ve sunucu aynı işlemciyi paylaşıyor.
+(Bu satırda önceden 0.81/6.19/7.44 ve 3.69/3.61/9.97 yazıyordu; JSON'daki
+hiçbir tura karşılık gelmiyordu, daha eski bir koşudan kalmıştı.)
 
 **Terim uyarısı:** "edge" burada *ortak yerleşim* anlamında, giyilebilir
 cihaz anlamında değil. Makalede tanımı verilmeli.
@@ -356,8 +369,15 @@ daha hızlı; tek süreç sütunu istemci makinesinde ölçüldü.
 
 ## 13_bulut — bulut yerleşimi (A6), Docker ile
 
-Sunucu **DigitalOcean VPS**'te (167.71.43.64, "DO-Regular" CPU, 2 GB RAM),
-Docker konteynerinde. İstemci bu makinede, internet üzerinden.
+Sunucu **DigitalOcean VPS**'te (167.71.43.64, "DO-Regular" CPU, 2 GB RAM,
+1 vCPU), Docker konteynerinde, **torch 2.14.0+cu130** (CUDA tekerleği,
+CPU-only makinede — v2'de CPU tekerleğiyle değişiyor). İstemci bu
+makinede, internet üzerinden.
+
+**Sütun istatistikleri:** aşağıdaki XAI tablosunda `xai` ortalama,
+`execution` ve `response` medyan. Bulut için tek yön `latency` saat
+belirsizliği (±25–51 ms) mertebesinde olduğundan makalede raporlanmaz;
+yerine `(response − execution − queuing)/2` kullanılır.
 
 **Dosya adları düzeltildi.** Ölçümler `fog_cloud_xai_*` ve
 `fog_docker_load_4` adlarıyla gelmişti ama hepsi buluta gidiyor; `fog`
@@ -407,7 +427,7 @@ içerir.
 ### 4 istemci yükü, bulutta
 
 ```
-n=4120 pencere   queuing ort 4.74 ms  p95 16.08 ms   response 62.1 ms  p95 117.8 ms
+n=4120 pencere   queuing ort 4.74 ms  p95 16.08 ms   response medyan 62.1 ms (ort 67.5)  p95 117.8 ms
 ```
 
 `10_yuk/`'teki fog koşusunun bulut karşılığı. Kuyruk fog'daki XAI'siz

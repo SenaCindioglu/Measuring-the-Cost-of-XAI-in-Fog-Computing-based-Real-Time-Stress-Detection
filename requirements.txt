@@ -1,7 +1,17 @@
-# Cekirdek bagimliliklar
-torch>=2.0
-numpy>=1.24
-psutil>=5.9
+# SURUMLER SABIT (==). v1 olcumlerinde uc yerlesim uc farkli yigindaydi
+# (torch 2.8.0 / 2.14.0 / 2.14.0+cu130) ve aciklama suresinin yerlesimler
+# arasi orani yonteme gore isaret degistirdi. Karsilastirma ancak ayni
+# yiginda gecerli; '>=' bu yuzden kullanilmaz.
+#
+# torch'u CPU tekerleginden kur (PyPI'deki Linux x86 tekerlegi CUDA'lidir,
+# bulutta +cu130 boyle geldi):
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.0
+#   pip install -r requirements.txt
+# Dockerfile bunu zaten boyle yapiyor. aarch64 (Raspberry Pi) icin ayni
+# komut gecerli.
+torch==2.14.0
+numpy==2.2.6
+psutil==7.0.0
 
 # XAI icin gerekli.
 #   scikit-learn : LIME'in agirlikli Ridge regresyonu ve SHAP arka planinin
@@ -10,5 +20,5 @@ psutil>=5.9
 #   shap         : SHAP GradientExplainer.
 # Sunucu --xai-method none ile kosuluyorsa shap gerekmez; xai/ paketi o
 # durumda hic import edilmiyor.
-scikit-learn>=1.3
-shap>=0.45
+scikit-learn==1.7.2
+shap==0.51.0

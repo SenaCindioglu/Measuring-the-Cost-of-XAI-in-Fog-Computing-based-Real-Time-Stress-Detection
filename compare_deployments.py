@@ -50,6 +50,7 @@ import numpy as np
 from config import config
 from data.loader import load_wesad_subject_native
 from serving.client import summarize
+from serving.server import XAI_METHODS, canonical_method
 from run_fog_experiment import (_ClientArgs, wait_for_port, run_all, aggregate,
                                 check_enough_ticks)
 
@@ -61,6 +62,7 @@ METRICS = [
     ('queuing', 'queuing delay'),
     ('execution', 'execution'),
     ('response', 'response time'),
+    ('age', 'sensor age'),
 ]
 
 
@@ -92,18 +94,45 @@ def start_local_server(args, host, port):
     cmd = [sys.executable, '-m', 'serving.server', '--host', host, '--port', str(port),
            '--model', args.model, '--norm-mode', args.norm_mode,
            '--threads', str(args.threads)]
+    if args.xai_method != 'none':
+        cmd += ['--xai-method', args.xai_method,
+                '--xai-threshold', str(args.xai_threshold)]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    if not wait_for_port(host, port):
+    # XAI acikken acilis (import + arka plan + isinma cagrisi) 20 s'yi asiyor.
+    if not wait_for_port(host, port, timeout=90.0 if args.xai_method != 'none' else 20.0):
         proc.kill()
         raise SystemExit(f"Yerel sunucu baslatilamadi ({host}:{port})")
     return proc
+
+
+def check_server_xai(name, agg, expected_method, expected_threshold):
+    """Sunucunun bildirdigi XAI kunyesi beklenenle ayni mi.
+
+    Uzak sunucuda aciklayici orada secilir; birinde yeniden baslatmayi
+    unutmak, farkli aciklayicilarin ayni satira yazilmasi demektir ve
+    tabloda fark edilmez. Kunye yoksa (eski sunucu) kosu reddedilir.
+    """
+    x = ((agg.get('server') or {}).get('xai')) or {}
+    method = canonical_method(x.get('method') or 'none')
+    thr = float(x.get('threshold') or 0.0)
+    exp_m = canonical_method(expected_method)
+    exp_t = float(expected_threshold) if exp_m != 'none' else 0.0
+    if not x:
+        raise SystemExit(f"'{name}' sunucusu XAI kunyesi gondermedi (eski surum?). "
+                         f"Sunucuyu guncelleyip yeniden baslat.")
+    if method != exp_m or abs(thr - exp_t) > 1e-9:
+        raise SystemExit(f"'{name}' sunucusu {method} / esik {thr} ile calisiyor, "
+                         f"beklenen {exp_m} / {exp_t}. O makinede:\n"
+                         f"    WESAD_XAI_METHOD={exp_m} WESAD_XAI_THRESHOLD={exp_t} "
+                         f"docker compose up -d")
 
 
 def one_deployment_run(args, cfg, loaded, subjects, host, port):
     ca_list = [_ClientArgs(host=host, port=port, subject=s,
                            tick_ms=args.tick_ms, norm_mode=args.norm_mode,
                            realtime=args.realtime, max_ticks=args.max_ticks,
-                           clock_resync_s=args.clock_resync_s)
+                           clock_resync_s=args.clock_resync_s, loop=args.loop,
+                           warmup_windows=args.warmup_windows)
                for s in subjects]
     results = asyncio.run(run_all(ca_list, cfg, loaded))
     summaries = []
@@ -132,6 +161,13 @@ def main():
     parser.add_argument('--max-ticks', type=int, default=0)
     parser.add_argument('--clock-resync-s', type=float, default=60.0,
                         help="Saat farki kac saniyede bir yeniden olculsun (0 = kapali)")
+    parser.add_argument('--loop', choices=('open', 'closed'), default=None,
+                        help="Yuk uretimi (realtime varsayilani open)")
+    parser.add_argument('--xai-method', choices=XAI_METHODS, default='none',
+                        help="Yerel sunucu bununla baslatilir; uzak sunucularin "
+                             "ayni aciklayiciyla calistigi kunyeden dogrulanir")
+    parser.add_argument('--xai-threshold', type=float, default=1.0,
+                        help="Guven bu degerin ALTINDA ise acikla (1.0 = her pencere)")
     parser.add_argument('--tag', default='deployments')
     args = parser.parse_args()
 
@@ -178,6 +214,7 @@ def main():
                 t0 = time.perf_counter()
                 agg = one_deployment_run(args, cfg, loaded, subjects, host, port)
                 agg['wall_s'] = time.perf_counter() - t0
+                check_server_xai(name, agg, args.xai_method, args.xai_threshold)
                 runs[name].append(agg)
                 m = agg['metrics']
                 print(f"  tur {r+1}/{args.repeat} | {name:<8} -> "
@@ -201,7 +238,10 @@ def main():
         'tick_ms': args.tick_ms, 'realtime': args.realtime,
         'norm_mode': args.norm_mode, 'max_ticks': args.max_ticks,
         'warmup_windows': args.warmup_windows,
-    }, 'by_deployment': {}}
+        'loop': runs and next(iter(runs.values()))[0].get('loop'),
+        'xai_method': canonical_method(args.xai_method),
+        'xai_threshold': args.xai_threshold if args.xai_method != 'none' else 0.0,
+    }, 'by_deployment': {}, 'runs': runs}
 
     for name, host, port, local in deployments:
         aggs = runs[name]
@@ -214,6 +254,19 @@ def main():
                 'jitter': spread([a['metrics'][key]['jitter_mean_abs_delta_ms'] for a in aggs]),
             }
         entry['bandwidth_kbps'] = spread([a['bandwidth']['kbps_total'] for a in aggs])
+        entry['n_measured'] = [a.get('n_measured') for a in aggs]
+        lag = [a['metrics']['send_lag']['p95_ms'] for a in aggs
+               if a['metrics'].get('send_lag')]
+        if lag:
+            entry['send_lag_p95_ms'] = spread(lag)
+        xai = [a['server_stages']['xai']['median_ms'] for a in aggs
+               if a.get('server_stages', {}).get('xai')]
+        if xai:
+            entry['xai_median_ms'] = spread(xai)
+        th = [((a.get('server') or {}).get('thermal') or {}).get('end') for a in aggs]
+        th = [t for t in th if t]
+        if th:
+            entry['thermal_end'] = th
         srv = next((a.get('server') for a in aggs if a.get('server')), None)
         if srv:
             entry['server_hardware'] = srv.get('hardware')
