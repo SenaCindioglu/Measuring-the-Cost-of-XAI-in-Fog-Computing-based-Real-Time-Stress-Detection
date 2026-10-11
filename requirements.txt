@@ -5,11 +5,11 @@
 #
 # torch'u CPU tekerleginden kur (PyPI'deki Linux x86 tekerlegi CUDA'lidir,
 # bulutta +cu130 boyle geldi):
-#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.0
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.14.1
 #   pip install -r requirements.txt
 # Dockerfile bunu zaten boyle yapiyor. aarch64 (Raspberry Pi) icin ayni
 # komut gecerli.
-torch==2.14.0
+torch==2.14.1
 numpy==2.2.6
 psutil==7.0.0
 

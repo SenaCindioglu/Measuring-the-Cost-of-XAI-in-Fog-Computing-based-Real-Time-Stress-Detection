@@ -4,7 +4,7 @@ Kayıt: 11 Ekim 2026. Deney JSON'u donanımı otomatik yazar; bu dosya yazılım
 sürümlerini ve kurulum notunu belgeler (tekrar-üretilebilirlik).
 
 ## Donanım
-- Raspberry Pi 4 Model B, Broadcom BCM2711 (Quad-core Cortex-A72 @1.8 GHz)
+- Raspberry Pi 4 Model B, Broadcom BCM2711 (Quad-core Cortex-A72 @1.5 GHz (Rev 1.1; JSON cpu_mhz_max=1500))
 - **4 GB** LPDDR4 (+2 GB swap)
 - 32 GB microSD (29 GB bölüm, ~20 GB boş)
 - Ağ: Ethernet, LAN3, 192.168.1.12

@@ -18,6 +18,10 @@ klasörün kendi README'sinde yazılı.
 > kalite) yöntemden bağımsız olduğu için geçerliliğini koruyor.
 > Makale sayıları elle değil `tools/paper_numbers.py` ile üretilir.
 
+> **Makalenin (paper/icaiic) güncel kaynakları — 12 Ekim 2026:**
+> `15_pi/` (Raspberry Pi 4 fog) ve `16_coloc/` (co-located, laptop). İkisi de
+> açık döngü, aynı PyTorch 2.14.1 CPU. Ayrıntı en altta.
+
 Yeni koşular `results/` kökünde oluşur (script'ler oraya yazıyor). Koşu
 bittikten sonra ilgili klasöre taşı, yoksa kök yeniden karışır.
 
@@ -30,7 +34,7 @@ kaynağı bu.
 
 | Dosya | Ne | Anahtar sayılar |
 |---|---|---|
-| `streaming_summary_native_fixed.json` | S11+S14, native yol (yeniden örnekleme ölçüm içinde), 1175 pencere | resampling 1.57 ms, preprocessing 0.25 ms, inference 3.04 ms, toplam 5.50 ms |
+| `streaming_summary_native_fixed.json` | S11+S14, native yol (yeniden örnekleme ölçüm içinde), 2123 ölçülen / 1198 etiketli pencere | resampling 1.57 ms, preprocessing 0.25 ms, inference 3.04 ms, toplam 5.50 ms |
 | `streaming_raw_native_fixed.json` | Aynı koşunun pencere bazlı ham ölçümleri | Pareto ve histogram için |
 
 ---
@@ -442,3 +446,54 @@ Ayrıntılı gerekçeler: [eski_ve_hatali/README.md](eski_ve_hatali/README.md).
 Özet: sızıntılı normalizasyonla ölçülen XAI taramaları, saat kayması
 düzeltilmeden önce alınan fog koşusu, `prepared` yol dönemi streaming
 sonuçları ve duman testleri.
+
+---
+
+## 15_pi — Raspberry Pi 4 fog düğümü (v2, açık döngü) — **makalenin ana verisi**
+
+Pi 4 Model B **Rev 1.1** (4× Cortex-A72, JSON `cpu_mhz_max` = **1500 MHz**,
+1.8 GHz değil), 4 GB, Raspberry Pi OS 64-bit, Python 3.13.5, torch 2.14.1+cpu,
+SHAP 0.53.0 (çıplak kurulum, Docker yok; `paper/pi_env.md`). Ethernet.
+Hepsi S11, gerçek zamanlı, açık döngü.
+
+| Dosya | Durum | Pencere | Not |
+|---|---|---|---|
+| `fog_pi_none.json` | XAI yok | 184 | ilk 1000 s = baseline segmenti (stres yok) |
+| `fog_pi_lime.json` | **lime_cheap** (250 örnek), her pencere | 184 | dosya adında "cheap" yok, künyeye bak |
+| `fog_pi_shap.json` | **shap_cheap** (nsamples 50), her pencere | 184 | aynı |
+| `fog_pi_sel_{lime,shap}.json` | τ = 0.80, *_cheap | 504 | ilk 43 dk (baseline + stres); 101 pencere açıklandı |
+| `fog_pi_load{1,2,4}.json` | 1/2/4 istemci, shap_cheap, her pencere | 44/istemci | **aynı sunucu örneği** (CPU ortalaması birikimli, raporlanmaz) |
+| `fog_pi_smoke*.json` | duman testi | 2 | makaleye girmez |
+
+**Bilinen üç kısıt (makalede yazılı):**
+1. **Governor sabitlenmemiş:** XAI'siz koşuda çıkarım 14.2 ms, XAI'li koşularda
+   7.3 ms (CPU boştayken düşük frekans). XAI'siz Pi tabanı bu yüzden şişkin.
+2. **Eski sunucu sürümü:** Pi koşuları executor düzeltmesinden önce alındı.
+   Açıklama olay döngüsünü bloke ettiği için çok istemcide bekleme `latency`
+   sütununa kaydı (4 istemcide "latency" medyanı 1177 ms). `response` ve
+   `age` doğru; makalede yük için yalnızca bunlar kullanılıyor. Termal kayıt
+   (`server.thermal`) da bu koşularda yok.
+3. Her yapılandırma tek koşu.
+
+Yük koşuları istemciler eşzamanlı başladığı için en kötü durumdur:
+k'ıncı istemci ≈ k × E bekler; ortalama (N+1)E/2 ve p95 ≈ N·E ölçümle %5
+içinde tutuyor (`tools/paper_numbers.py` iddia denetimi).
+
+## 16_coloc — co-located (laptop), v2
+
+İstemci ve sunucu aynı laptopta (x86-64, 20 mantıksal çekirdek, 16 GB,
+Windows 11), Python 3.11.9, **torch 2.14.1+cpu** (Pi ile aynı sürüm),
+SHAP 0.51.0. Açık döngü, 184 pencere, oturum bazlı kaynak özeti.
+Dosyalar 12 Ekim'de kökten taşındı ve yeniden adlandırıldı:
+
+| Yeni ad | Eski ad | Açıklayıcı |
+|---|---|---|
+| `coloc_none.json` | `fog_edge_none2.json` | yok |
+| `coloc_lime_cheap.json` | `fog_edge_lime2.json` | LIME 250 |
+| `coloc_shap_cheap.json` | `fog_edge_shap2.json` | SHAP 50 |
+| `coloc_lime.json` | `fog_edge_lime_full2.json` | LIME 500 |
+| `coloc_shap.json` | `fog_edge_shap_full2.json` | SHAP 200 |
+
+Pi / co-located açıklama süresi oranı (aynı torch): LIME-cheap **2.6×**,
+SHAP-cheap **5.8×**. "Pi yalnızca 2–3× yavaş" ifadesi yalnızca LIME için
+doğru; SHAP için değil.

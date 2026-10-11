@@ -202,7 +202,7 @@ def main():
                         help="Her tahmini geldigi anda ekrana yaz (tek istemcide; "
                              "gosterim amacli, olcumu etkilemez)")
     parser.add_argument('--xai-method',
-                        choices=('none', 'lime', 'lime_ucuz', 'shap', 'shap_ucuz'),
+                        choices=('none', 'lime', 'lime_cheap', 'shap', 'shap_cheap', 'lime_ucuz', 'shap_ucuz'),
                         default='none',
                         help="Yalnizca YEREL sunucu icin; uzak sunucuda "
                              "aciklayici orada --xai-method ile secilir")

@@ -15,7 +15,7 @@ WORKDIR /app
 COPY requirements.txt .
 # torch CPU indeksinden: PyPI'nin x86 tekerlegi CUDA'li gelir (+cu130),
 # CPU-only VPS'te yuzlerce MB fazladan bellek ve farkli kod yolu demek.
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.14.0 \
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.14.1 \
  && pip install --no-cache-dir -r requirements.txt \
  && python -c "import torch; assert '+cu' not in torch.__version__, torch.__version__; print('torch', torch.__version__)"
 

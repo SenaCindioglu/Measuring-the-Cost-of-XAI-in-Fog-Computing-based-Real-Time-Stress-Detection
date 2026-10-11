@@ -16,6 +16,13 @@ tarifidir. Sonuçlar `results/15_v2/` altına gelir, makale sayıları
 
 ---
 
+> **12 Ekim notu.** Pi koşuları (`results/15_pi/`) executor düzeltmesinden
+> önceki sunucu sürümüyle alındı. Tek istemcili sonuçlar geçerli; çok
+> istemcili koşularda yalnızca `response`/`age` geçerli. Pi'de depoyu
+> güncelleyip (`server_build: v2.1-executor` JSON'da görünmeli) ve governor'ı
+> `performance` yapıp `fog_pi_load{1,2,4}` tekrar koşulursa (3 × 5 dk)
+> latency/queuing ayrımı da makaleye girebilir.
+
 ## 0. Öncelik (zaman yetmezse buradan kes)
 
 1. **Pi seçici koşu, tam kayıt** (~90 dk, gözetimsiz) — makalenin en güçlü yeni sonucu.

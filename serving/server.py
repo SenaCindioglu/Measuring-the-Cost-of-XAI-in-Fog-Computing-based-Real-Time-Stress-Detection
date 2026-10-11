@@ -32,6 +32,7 @@ import json
 import os
 import platform
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
@@ -325,78 +326,98 @@ class ClientSession:
         self.thermal_start = None
 
 
+def process_packet(sess, body, cfg, model, explainer, xai_threshold):
+    """Bir veri paketini isler; ISCI IPLIGINDE calisir (olay dongusunde degil).
+
+    Neden ayri iplik: bu fonksiyon aciklama acikken saniyeler surer. Olay
+    dongusunde calistiginda okuyucu gorevler o sure boyunca paket okuyamaz;
+    bekleyen paketlerin t_recv damgasi aciklama bitene kadar atilmaz ve
+    kuyruk beklemesi 'latency' sutununa kayar (v1 ve Pi yuk kosularinda
+    4 istemcide 'ag gecikmesi' medyani 1.2 s okundu). Tek iplikli executor
+    tek-worker semantigini korur; oturum durumu yalnizca bu iplikte degisir.
+    """
+    t_start = time.perf_counter_ns()
+    msg_id, t_send, chunks = P.unpack_data(body, NATIVE_STREAMS, sess.per_tick)
+    ready = sess.buffer.push(chunks, sess.tick_s)
+
+    predicted = False
+    explained = False
+    pred = conf = None
+    stages = None
+
+    if ready:
+        stages = {}
+        t0 = time.perf_counter()
+        raw_window = sess.buffer.get_window()
+        stages['resampling'] = (time.perf_counter() - t0) * 1000.0
+
+        if raw_window is not None:
+            t0 = time.perf_counter()
+            if sess.runner is not None:
+                new_part = (raw_window if sess.n_windows == 0
+                            else raw_window[-cfg.HOP_SIZE:])
+                sess.runner.update(new_part)
+                m, sd = sess.runner.mean, sess.runner.std
+            else:
+                m, sd = sess.fixed_mean, sess.fixed_std
+            norm_window = apply_normalization(raw_window, m, sd)
+            stages['preprocessing'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            x = torch.FloatTensor(norm_window.transpose(1, 0)).unsqueeze(0)
+            stages['tensor_prep'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                logits = model(x)
+            stages['inference'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            probs = torch.softmax(logits, dim=1).numpy()[0]
+            pred = int(probs.argmax())
+            conf = float(probs.max())
+            stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
+
+            # --- Secici XAI ---
+            # Aciklama, tahminle AYNI worker'da ve execution time'in
+            # ICINDE uretilir. Ayri bir worker'a atilsaydi maliyeti
+            # gorunmez olurdu; deneyin butun amaci o maliyeti olcmek.
+            if explainer is not None and should_explain(conf, xai_threshold):
+                t0 = time.perf_counter()
+                explainer.explain(
+                    np.ascontiguousarray(norm_window.transpose(1, 0),
+                                         dtype=np.float32))
+                stages['xai'] = (time.perf_counter() - t0) * 1000.0
+                explained = True
+                sess.n_explained += 1
+
+            predicted = True
+            sess.n_windows += 1
+
+    t_end = time.perf_counter_ns()
+    return msg_id, t_start, t_end, predicted, pred, conf, stages, explained
+
+
 async def worker(state):
     """
     Tek worker: kuyrugu sirayla bosaltir, modeli calistirir, cevabi yazar.
-    Bloklayici oldugu icin ikinci bir istek gelirse kuyrukta bekler --
-    queuing delay tam olarak bu beklemeyi olcer.
+    Hesap tek iplikli executor'da kosar; o surerken olay dongusu yeni
+    paketleri okumaya ve damgalamaya devam eder. Ikinci bir istek kuyrukta
+    bekler -- queuing delay tam olarak bu beklemeyi olcer.
     """
     cfg, model, queue = state['cfg'], state['model'], state['queue']
     explainer = state.get('explainer')
     xai_threshold = state.get('xai_threshold', 0.0)
+    executor = state['executor']
+    loop = asyncio.get_running_loop()
 
     while True:
         sess, body, t_recv = await queue.get()
         try:
-            t_start = time.perf_counter_ns()
-            msg_id, t_send, chunks = P.unpack_data(body, NATIVE_STREAMS, sess.per_tick)
-            ready = sess.buffer.push(chunks, sess.tick_s)
-
-            predicted = False
-            explained = False
-            pred = conf = None
-            stages = None
-
-            if ready:
-                stages = {}
-                t0 = time.perf_counter()
-                raw_window = sess.buffer.get_window()
-                stages['resampling'] = (time.perf_counter() - t0) * 1000.0
-
-                if raw_window is not None:
-                    t0 = time.perf_counter()
-                    if sess.runner is not None:
-                        new_part = (raw_window if sess.n_windows == 0
-                                    else raw_window[-cfg.HOP_SIZE:])
-                        sess.runner.update(new_part)
-                        m, sd = sess.runner.mean, sess.runner.std
-                    else:
-                        m, sd = sess.fixed_mean, sess.fixed_std
-                    norm_window = apply_normalization(raw_window, m, sd)
-                    stages['preprocessing'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    x = torch.FloatTensor(norm_window.transpose(1, 0)).unsqueeze(0)
-                    stages['tensor_prep'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    with torch.no_grad():
-                        logits = model(x)
-                    stages['inference'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    probs = torch.softmax(logits, dim=1).numpy()[0]
-                    pred = int(probs.argmax())
-                    conf = float(probs.max())
-                    stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
-
-                    # --- Secici XAI ---
-                    # Aciklama, tahminle AYNI worker'da ve execution time'in
-                    # ICINDE uretilir. Ayri bir iplige atilsaydi maliyeti
-                    # gorunmez olurdu; deneyin butun amaci o maliyeti olcmek.
-                    if explainer is not None and should_explain(conf, xai_threshold):
-                        t0 = time.perf_counter()
-                        explainer.explain(
-                            np.ascontiguousarray(norm_window.transpose(1, 0),
-                                                 dtype=np.float32))
-                        stages['xai'] = (time.perf_counter() - t0) * 1000.0
-                        explained = True
-                        sess.n_explained += 1
-
-                    predicted = True
-                    sess.n_windows += 1
-
-            t_end = time.perf_counter_ns()
+            (msg_id, t_start, t_end, predicted, pred, conf, stages,
+             explained) = await loop.run_in_executor(
+                executor, process_packet, sess, body, cfg, model,
+                explainer, xai_threshold)
 
             sess.writer.write(P.pack_reply(msg_id, t_recv, t_start, t_end,
                                            predicted=predicted, pred=pred,
@@ -465,6 +486,9 @@ async def handle_client(reader, writer, state):
                         'resources': resource_summary(state.get('sampler'),
                                                       start=sess.sample_start),
                         'resources_scope': 'session',
+                        # v2.1: hesap executor'da; latency/queuing ayrimi
+                        # cok istemcide de gecerli. Eski kosularda alan yok.
+                        'server_build': 'v2.2-executor-blas1',
                         'thermal': {'start': sess.thermal_start,
                                     'end': thermal_snapshot()},
                         'client_loop': sess.loop,
@@ -509,8 +533,19 @@ async def handle_client(reader, writer, state):
 
 async def main_async(args):
     cfg = config
+    blas_limited = False
     if args.threads > 0:
         torch.set_num_threads(args.threads)
+        # torch.set_num_threads numpy/scikit-learn'in BLAS havuzunu
+        # sinirlamaz: Pi'de LIME'in Ridge cozumu ortalama ~2.3 cekirdek
+        # kullandi (CPU %35, mesgul oran %15.5). "Tek worker, tek iplik"
+        # iddiasi ancak bu sinirla dogru olur.
+        try:
+            from threadpoolctl import threadpool_limits
+            threadpool_limits(limits=args.threads)
+            blas_limited = True
+        except ImportError:
+            pass
 
     model, arch, meta = load_checkpoint(args.model, torch.device('cpu'), fallback_cfg=cfg)
 
@@ -532,6 +567,7 @@ async def main_async(args):
               f"(olcume DAHIL DEGIL).")
 
     hw = hardware_info()
+    hw['blas_threads_limited'] = blas_limited
     sampler = None
     if _HAS_PSUTIL:
         sampler = _ResourceSampler(psutil.Process(os.getpid()), 0.25)
@@ -541,7 +577,9 @@ async def main_async(args):
              'explainer': explainer, 'xai_threshold': args.xai_threshold,
              'xai_method': args.xai_method, 'xai_warmup_ms': warmup_ms,
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
-             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler}
+             'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler,
+             'executor': ThreadPoolExecutor(max_workers=1,
+                                            thread_name_prefix='worker')}
 
     asyncio.create_task(worker(state))
 

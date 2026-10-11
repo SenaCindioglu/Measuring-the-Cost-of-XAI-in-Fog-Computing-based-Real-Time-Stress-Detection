@@ -25,7 +25,7 @@ büyüklük mertebesi değişmez.
 ## IV. Experimental Setup — Fog worker and software stack
 
 > The fog worker is a Raspberry Pi 4 Model B (Broadcom BCM2711, quad-core
-> Cortex-A72 @1.8 GHz, 4 GB LPDDR4), running 64-bit Raspberry Pi OS (Debian 13,
+> Cortex-A72 @1.5 GHz [Rev 1.1; measured cpu_mhz_max = 1500], 4 GB LPDDR4), running 64-bit Raspberry Pi OS (Debian 13,
 > kernel 6.18, aarch64) and PyTorch 2.14.1 (CPU build). On aarch64 the default
 > PyTorch wheel declares the CUDA runtime as a hard dependency; the CPU-only
 > build is required on a GPU-less node. The co-located baseline runs the

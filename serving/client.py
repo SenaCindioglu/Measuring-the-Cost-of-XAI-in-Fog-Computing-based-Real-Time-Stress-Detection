@@ -294,6 +294,7 @@ async def _run_client_open(args, cfg, streams, raw_labels, client_id):
                                   'offset_ns': best[0], 'rtt_ns': best[1]})
 
     recv_task = asyncio.create_task(receiver())
+    resync_task = None
 
     t_wall0 = time.perf_counter()
     t0_ns = time.perf_counter_ns()
@@ -332,10 +333,15 @@ async def _run_client_open(args, cfg, streams, raw_labels, client_id):
                     if args.realtime else "")
             print(f"{tag} tick {done}/{n_ticks} (%{100 * done / n_ticks:.0f}), "
                   f"yolda {len(pending)} paket{left}", flush=True)
-        if now >= t_next_resync:
+        # Saat olcumu ayri gorevde: PONG, sunucu bir aciklamayla mesgulken
+        # gecikebilir. Gonderici onu beklerse sensor akisi durur (Pi yuk
+        # kosularinda send_lag 3.7 s'ye cikti) ve acik dongu bozulur.
+        if now >= t_next_resync and (resync_task is None or resync_task.done()):
             t_next_resync = now + resync_every_s
-            await resync()
+            resync_task = asyncio.create_task(resync())
 
+    if resync_task is not None and not resync_task.done():
+        await resync_task
     send_done = True
     if pending:
         # Son aciklamalarin bitmesini bekle. Aciklama hop'tan uzunsa (Pi'de
