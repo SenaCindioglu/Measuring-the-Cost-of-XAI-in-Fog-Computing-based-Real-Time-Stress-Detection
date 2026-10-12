@@ -488,7 +488,10 @@ async def handle_client(reader, writer, state):
                         'resources_scope': 'session',
                         # v2.1: hesap executor'da; latency/queuing ayrimi
                         # cok istemcide de gecerli. Eski kosularda alan yok.
-                        'server_build': 'v2.2-executor-blas1',
+                        # v2.3: BLAS siniri bayraga baglandi (--limit-blas,
+                        # varsayilan kapali); fiili durum
+                        # hardware.blas_threads_limited alaninda.
+                        'server_build': 'v2.3-executor-blasflag',
                         'thermal': {'start': sess.thermal_start,
                                     'end': thermal_snapshot()},
                         'client_loop': sess.loop,
@@ -536,10 +539,15 @@ async def main_async(args):
     blas_limited = False
     if args.threads > 0:
         torch.set_num_threads(args.threads)
-        # torch.set_num_threads numpy/scikit-learn'in BLAS havuzunu
-        # sinirlamaz: Pi'de LIME'in Ridge cozumu ortalama ~2.3 cekirdek
-        # kullandi (CPU %35, mesgul oran %15.5). "Tek worker, tek iplik"
-        # iddiasi ancak bu sinirla dogru olur.
+    # BLAS havuzu (numpy/scikit-learn) VARSAYILAN olarak serbesttir:
+    # ICAIIC veri setinin tamami (edge/Pi/cloud) serbest BLAS ile olculdu
+    # ve makale bunu acikca beyan ediyor ("default multithreading on both
+    # placements"). Siniri acmak yeni kosulari eski tablolarla
+    # KARSILASTIRILAMAZ yapar: host'ta lime_cheap 287 -> ~478 ms (~1.7x).
+    # Cok-worker deneyleri (IISEC, worker basina cekirdek butcesi) icin
+    # --limit-blas ile acilir; hangi kosunun hangi modda oldugu
+    # hardware.blas_threads_limited alanina yazilir.
+    if getattr(args, 'limit_blas', False) and args.threads > 0:
         try:
             from threadpoolctl import threadpool_limits
             threadpool_limits(limits=args.threads)
@@ -643,6 +651,13 @@ def main():
     parser.add_argument('--norm-mode', choices=['fixed', 'running'], default=cfg.DEFAULT_NORM_MODE,
                         help="Sunucu tarafi normalizasyon modu")
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
+    parser.add_argument('--limit-blas', action='store_true',
+                        default=os.environ.get('WESAD_LIMIT_BLAS', '') == '1',
+                        help="BLAS havuzunu da --threads degerine sinirla. "
+                             "VARSAYILAN KAPALI: ICAIIC olcumleri serbest BLAS "
+                             "ile alindi; acmak yeni kosulari eskilerle "
+                             "karsilastirilamaz yapar (~1.7x yavas). "
+                             "IISEC cok-worker icin. Ortam: WESAD_LIMIT_BLAS=1")
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
     # Varsayilanlar ortam degiskeninden okunur: Docker'da bayrak gecirmek
