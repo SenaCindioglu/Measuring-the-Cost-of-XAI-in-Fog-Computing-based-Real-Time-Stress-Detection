@@ -1,0 +1,204 @@
+{
+ "clock_sync": {
+  "offset_ns": -10044016878679977,
+  "rtt_ns": 87053400,
+  "uncertainty_ms": 43.5267,
+  "method": "periodik yeniden olcum + dogrusal ara deger",
+  "resync_every_s": 60.0,
+  "n_samples": 2,
+  "span_s": 1000.3933323,
+  "rtt_min_ns": 45105900,
+  "rtt_max_ns": 87053400,
+  "drift_ns": -40304794,
+  "drift_ms": -40.304794,
+  "drift_ppm": -40.28894705578997,
+  "samples": [
+   {
+    "t_rel_s": 0.0,
+    "offset_ns": -10044016878679977,
+    "rtt_ns": 45105900
+   },
+   {
+    "t_rel_s": 1000.3933323,
+    "offset_ns": -10044016918984771,
+    "rtt_ns": 87053400
+   }
+  ]
+ },
+ "server": {
+  "hardware": {
+   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.36",
+   "machine": "x86_64",
+   "processor": "DO-Regular",
+   "python": "3.11.9",
+   "torch": "2.14.1+cpu",
+   "package_versions": {
+    "numpy": "2.2.6",
+    "scikit-learn": "1.7.2",
+    "shap": "0.51.0",
+    "psutil": "7.0.0"
+   },
+   "server_commit": "c39487e7f05c9c140dc31ec59b7d6bd126007438",
+   "cpu_count": 1,
+   "torch_threads": 1,
+   "total_ram_mb": 1968.0,
+   "cpu_mhz_max": null
+  },
+  "resources": {
+   "process_cpu_percent": {
+    "mean": 0.4215486725663716,
+    "max": 12.0,
+    "p95": 4.0,
+    "n_samples": 6780
+   },
+   "process_rss_mb": {
+    "mean": 236.15208794247786,
+    "max": 237.05859375
+   },
+   "system_cpu_percent": 1.5,
+   "system_memory_percent": 29.6,
+   "process_memory_percent": 12.05
+  },
+  "sessions_peak": 2
+ },
+ "n_packets": 2000,
+ "n_predictions": 199,
+ "n_measured": 184,
+ "n_warmup_excluded": 15,
+ "wall_seconds": 1000.5007458012551,
+ "metrics": {
+  "latency": {
+   "mean_ms": 37.265240478260864,
+   "median_ms": 38.956244,
+   "p95_ms": 44.788187799999996,
+   "p99_ms": 47.02729547999992,
+   "min_ms": 25.068346,
+   "max_ms": 114.140748,
+   "std_ms": 8.674714403771517,
+   "jitter_mean_abs_delta_ms": 3.052162087431694
+  },
+  "queuing": {
+   "mean_ms": 0.1680000543478261,
+   "median_ms": 0.161855,
+   "p95_ms": 0.22845379999999998,
+   "p99_ms": 0.3188923199999999,
+   "min_ms": 0.105912,
+   "max_ms": 0.362162,
+   "std_ms": 0.037643667322921466,
+   "jitter_mean_abs_delta_ms": 0.03902579234972677
+  },
+  "execution": {
+   "mean_ms": 4.403160375,
+   "median_ms": 4.1626765,
+   "p95_ms": 5.51126835,
+   "p99_ms": 8.96361709999991,
+   "min_ms": 3.140573,
+   "max_ms": 16.781593,
+   "std_ms": 1.3972245011592688,
+   "jitter_mean_abs_delta_ms": 0.8459074098360657
+  },
+  "response": {
+   "mean_ms": 85.08798260869565,
+   "median_ms": 71.1834,
+   "p95_ms": 151.25070499999998,
+   "p99_ms": 159.285803,
+   "min_ms": 49.866,
+   "max_ms": 160.0289,
+   "std_ms": 34.601839587240306,
+   "jitter_mean_abs_delta_ms": 28.79141912568306
+  }
+ },
+ "bandwidth": {
+  "bytes_sent": 23106000,
+  "bytes_recv": 299495,
+  "kbps_sent": 184.75548446689436,
+  "kbps_recv": 2.394760833567581,
+  "kbps_total": 187.15024530046193
+ },
+ "server_stages": {
+  "resampling": {
+   "mean_ms": 0.9186110654137218,
+   "median_ms": 0.8475834038108587,
+   "p95_ms": 1.203900366090238,
+   "p99_ms": 2.803282036911678,
+   "min_ms": 0.5605989135801792,
+   "max_ms": 5.612620851024985,
+   "std_ms": 0.47212857319320123,
+   "jitter_mean_abs_delta_ms": 0.25078798949596337
+  },
+  "preprocessing": {
+   "mean_ms": 0.2459677622106898,
+   "median_ms": 0.2214235719293356,
+   "p95_ms": 0.4078473197296261,
+   "p99_ms": 0.6603582180105015,
+   "min_ms": 0.1517101190984249,
+   "max_ms": 1.6041118651628494,
+   "std_ms": 0.15514379749884477,
+   "jitter_mean_abs_delta_ms": 0.0758253411985323
+  },
+  "tensor_prep": {
+   "mean_ms": 0.18610069199222262,
+   "median_ms": 0.1742650056257844,
+   "p95_ms": 0.2804519142955541,
+   "p99_ms": 0.3802457591518759,
+   "min_ms": 0.13066409155726433,
+   "max_ms": 0.7079779170453548,
+   "std_ms": 0.060467803358474737,
+   "jitter_mean_abs_delta_ms": 0.04450169575141102
+  },
+  "inference": {
+   "mean_ms": 2.696542943696208,
+   "median_ms": 2.521454938687384,
+   "p95_ms": 3.6425660480745137,
+   "p99_ms": 6.384661381598525,
+   "min_ms": 1.7256038263440132,
+   "max_ms": 8.842669194564223,
+   "std_ms": 0.838629674274993,
+   "jitter_mean_abs_delta_ms": 0.5985079943889478
+  },
+  "postprocessing": {
+   "mean_ms": 0.10157862941370062,
+   "median_ms": 0.09741645772010088,
+   "p95_ms": 0.14938751701265574,
+   "p99_ms": 0.20990493008866878,
+   "min_ms": 0.06753415800631046,
+   "max_ms": 0.2334541641175747,
+   "std_ms": 0.024933065498007393,
+   "jitter_mean_abs_delta_ms": 0.02529848967500723
+  }
+ },
+ "classification": {
+  "n_labeled": 182,
+  "accuracy": 1.0,
+  "stress_precision": 0.0,
+  "stress_recall": 0.0,
+  "stress_f1": 0.0,
+  "confusion": {
+   "tn": 182,
+   "fp": 0,
+   "fn": 0,
+   "tp": 0
+  }
+ },
+ "subject": "S11",
+ "config": {
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "tick_ms": 500,
+  "norm_mode": "running",
+  "realtime": true,
+  "open_loop": true,
+  "requested_measured_windows": 184,
+  "max_ticks": 2000,
+  "warmup_windows": 15,
+  "threads": 1,
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "server": "167.71.43.64:9099",
+  "local_server": false,
+  "clock_synced": false,
+  "total_wall_s": 1001.1379490997642,
+  "clock_resync_s": 60.0
+ }
+}
