@@ -135,6 +135,64 @@ Tam LIME yapılandırması için `WESAD_XAI_METHOD=lime` kullan; bu, seçili
 artifaktan gelen 500 perturbasyon örneğini çalıştırır. `lime_ucuz` 250 örnek
 kullanır.
 
+Karşılaştırılabilir XAI bulut ölçümleri için Docker imajı `requirements-docker.txt`
+ile Python 3.11.9 ve tabloda belirtilen PyTorch/NumPy/scikit-learn/SHAP/psutil
+sürümlerine sabitlenir. İstemciye `--open-loop --measured-windows 184` verildiğinde
+yanıtları beklemeden her 500 ms'de bir paket gönderilir; varsayılan 15 warm-up
+penceresi dahil toplam 2000 tick gönderilir ve tam 184 pencere raporlanır.
+`--open-loop` olmadan istemci mevcut stop-and-wait kipinde kalır.
+İstemci için Python 3.11.9 kullanan ayrı bir sanal ortam oluşturup
+`pip install -r requirements-client.txt` çalıştır; bu PyTorch CPU, NumPy ve
+psutil sürümlerini sabitler. Windows'ta doğru Python 3.11.9 kurulumunun tam
+yoluyla şu şekilde oluştur:
+
+```powershell
+& "C:\Path\To\Python3119\python.exe" -m venv .venv-xai
+.\.venv-xai\Scripts\python.exe -m pip install -r requirements-client.txt
+.\.venv-xai\Scripts\python.exe -c "import platform, torch, numpy; print(platform.python_version(), torch.__version__, numpy.__version__)"
+```
+
+Yazdırılan sürümleri hedef tabloyla karşılaştır; mevcut varsayılan ortamın
+Python 3.11.1 / PyTorch 2.7.1+cpu / NumPy 1.26.4 olduğu için onunla yeni
+karşılaştırma koşusu yapma. Model ve XAI hesabı sunucu konteynerinde çalışır;
+istemci pinleri ise aynı çalışma ortamını ve istemci ölçüm koşullarını korur.
+
+184 ölçülmüş pencere için aynı sabit Docker imajını tüm yöntemlerde kullan:
+
+```bash
+cd ~/files
+WESAD_BUILD_COMMIT=$(git rev-parse HEAD) docker compose build --no-cache
+```
+
+Yöntemler arasında yalnızca servisi yeniden yarat; yeniden build etme:
+
+```bash
+WESAD_XAI_METHOD=lime WESAD_XAI_THRESHOLD=1.0 docker compose up -d --force-recreate
+WESAD_XAI_METHOD=lime_ucuz WESAD_XAI_THRESHOLD=1.0 docker compose up -d --force-recreate
+WESAD_XAI_METHOD=shap WESAD_XAI_THRESHOLD=1.0 docker compose up -d --force-recreate
+WESAD_XAI_METHOD=shap_ucuz WESAD_XAI_THRESHOLD=1.0 docker compose up -d --force-recreate
+```
+
+PowerShell istemcisinde prediction-only baseline ve her XAI yöntemine ayrı
+etiket vererek aynı ölçüm yükünü kullan:
+
+```powershell
+\.venv-xai\Scripts\python.exe run_fog_experiment.py --server-host SERVER_IP --subject S11 --realtime --open-loop --measured-windows 184 --warmup-windows 15 --tag cloud_baseline
+\.venv-xai\Scripts\python.exe run_fog_experiment.py --server-host SERVER_IP --subject S11 --realtime --open-loop --measured-windows 184 --warmup-windows 15 --tag cloud_xai_lime
+\.venv-xai\Scripts\python.exe run_fog_experiment.py --server-host SERVER_IP --subject S11 --realtime --open-loop --measured-windows 184 --warmup-windows 15 --tag cloud_xai_limeucuz
+\.venv-xai\Scripts\python.exe run_fog_experiment.py --server-host SERVER_IP --subject S11 --realtime --open-loop --measured-windows 184 --warmup-windows 15 --tag cloud_xai_shap
+\.venv-xai\Scripts\python.exe run_fog_experiment.py --server-host SERVER_IP --subject S11 --realtime --open-loop --measured-windows 184 --warmup-windows 15 --tag cloud_xai_shap_ucuz
+```
+
+For baseline set `WESAD_XAI_METHOD=none` and threshold `0`; for each explanation
+run set the corresponding method and threshold `1.0` on the VM, then recreate
+the service before starting that client run.
+
+At 500 ms/tick, each run sends 2000 ticks: 20 ticks to fill the first window,
+15 warm-up windows, then 184 measured windows. Verify `n_measured` is 184.
+Each JSON records the open-loop flag, tick/warm-up/window counts, server package
+versions and server commit.
+
 Elinde eğitilmiş checkpoint varsa (normal durum) doğrudan 2. adıma geç;
 1. adım yalnızca sıfırdan yeni bir model eğitmek istersen gerekir.
 

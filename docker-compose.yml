@@ -2,6 +2,8 @@ services:
   stress-server:
     build:
       context: .
+      args:
+        WESAD_BUILD_COMMIT: ${WESAD_BUILD_COMMIT:-local}
     image: wesad-stress-server:latest
     container_name: wesad-stress-server
     restart: unless-stopped

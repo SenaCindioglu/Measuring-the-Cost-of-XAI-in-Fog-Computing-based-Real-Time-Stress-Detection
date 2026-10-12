@@ -173,12 +173,25 @@ def main():
     parser.add_argument('--threads', type=int, default=cfg.DEFAULT_THREADS)
     parser.add_argument('--realtime', '--live', dest='realtime', action='store_true',
                         help="Sensor gercek hizinda gonder (kuyruk gecikmesi ancak boyle anlamli)")
+    parser.add_argument('--open-loop', action='store_true',
+                        help="Yaniti beklemeden tick hizinda gonder; --realtime gibi zamanlar")
     parser.add_argument('--max-ticks', type=int, default=0)
+    parser.add_argument('--measured-windows', type=int, default=0,
+                        help="Warm-up disinda tam bu sayida tahmin penceresi olc")
     parser.add_argument('--clock-resync-s', type=float, default=60.0,
                         help="Saat farki kac saniyede bir yeniden olculsun "
                              "(0 = yalnizca baslangicta; uzun kosularda latency kayar)")
     parser.add_argument('--tag', default='fog')
     args = parser.parse_args()
+
+    if args.measured_windows < 0:
+        parser.error('--measured-windows pozitif olmali')
+    if args.measured_windows:
+        if args.max_ticks:
+            parser.error('--measured-windows ve --max-ticks birlikte kullanilamaz')
+        fill_ticks = int(round(cfg.WINDOW_DURATION * 1000 / args.tick_ms))
+        ticks_per_prediction = max(1, int(round(cfg.HOP_DURATION * 1000 / args.tick_ms)))
+        args.max_ticks = fill_ticks + (args.warmup_windows + args.measured_windows - 1) * ticks_per_prediction
 
     host = args.server_host or '127.0.0.1'
     local_server = args.server_host is None
@@ -203,6 +216,7 @@ def main():
     print(f"Istemci      : {n_clients} adet -> {subjects}")
     print(f"Tick         : {args.tick_ms}ms | Realtime: {args.realtime} | "
           f"Norm: {args.norm_mode} | Sunucu ipligi: {args.threads}")
+    print(f"Gonderim     : {'open-loop' if args.open_loop else 'stop-and-wait'}")
     if not local_server:
         print("[!] UZAK sunucu: saat farki NTP mantigiyla olculup duzeltilir, ama")
         print("    latency'nin belirsizligi gidis-donus suresinin yarisi kadardir.")
@@ -219,9 +233,22 @@ def main():
                 raise SystemExit(f"{s} yuklenemedi")
             loaded[s] = (st, lb)
 
+        if args.measured_windows:
+            available_ticks = min(
+                len(loaded[s][0][name]) // int(round(rate * args.tick_ms / 1000.0))
+                for s in set(subjects)
+                for name, rate, _ in NATIVE_STREAMS
+                if int(round(rate * args.tick_ms / 1000.0)) > 0)
+            if args.max_ticks > available_ticks:
+                raise SystemExit(
+                    f"{args.measured_windows} measured windows plus warm-up require "
+                    f"{args.max_ticks} ticks, but the selected data supports "
+                    f"only {available_ticks} ticks.")
+
         ca_list = [_ClientArgs(host=host, port=args.port, subject=s,
                                tick_ms=args.tick_ms, norm_mode=args.norm_mode,
                                realtime=args.realtime, max_ticks=args.max_ticks,
+                               open_loop=args.open_loop,
                                clock_resync_s=args.clock_resync_s)
                    for s in subjects]
 
@@ -239,6 +266,9 @@ def main():
         agg['config'] = {
             'subjects': subjects, 'n_clients': n_clients, 'tick_ms': args.tick_ms,
             'norm_mode': args.norm_mode, 'realtime': args.realtime,
+            'open_loop': args.open_loop,
+            'requested_measured_windows': args.measured_windows or None,
+            'max_ticks': args.max_ticks, 'warmup_windows': args.warmup_windows,
             'threads': args.threads, 'model': os.path.basename(args.model),
             'server': f'{host}:{args.port}', 'local_server': local_server,
             'clock_synced': local_server, 'total_wall_s': wall,

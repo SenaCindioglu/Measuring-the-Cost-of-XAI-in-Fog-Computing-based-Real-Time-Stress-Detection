@@ -1,14 +1,17 @@
-FROM python:3.11-slim
+FROM python:3.11.9-slim
+
+ARG WESAD_BUILD_COMMIT=unknown
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     WESAD_CHECKPOINT_DIR=/app/checkpoints \
-    WESAD_RESULTS_DIR=/app/results
+    WESAD_RESULTS_DIR=/app/results \
+    WESAD_BUILD_COMMIT=${WESAD_BUILD_COMMIT}
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-docker.txt .
+RUN pip install --no-cache-dir -r requirements-docker.txt
 
 COPY config.py .
 COPY data ./data

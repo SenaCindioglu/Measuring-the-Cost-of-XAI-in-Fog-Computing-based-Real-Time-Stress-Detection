@@ -28,6 +28,7 @@ Calistirma:
 
 import argparse
 import asyncio
+import importlib.metadata
 import json
 import os
 import platform
@@ -57,12 +58,21 @@ def hardware_info():
     Raspberry Pi'de platform.processor() bos doner; model adi
     /proc/device-tree/model ya da /proc/cpuinfo'dan okunur.
     """
+    package_versions = {}
+    for package in ('numpy', 'scikit-learn', 'shap', 'psutil'):
+        try:
+            package_versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            pass
+
     info = {
         'platform': platform.platform(),
         'machine': platform.machine(),
         'processor': platform.processor() or None,
         'python': platform.python_version(),
         'torch': torch.__version__,
+        'package_versions': package_versions,
+        'server_commit': os.environ.get('WESAD_BUILD_COMMIT', 'unknown'),
         'cpu_count': os.cpu_count(),
         'torch_threads': torch.get_num_threads(),
     }
@@ -178,73 +188,77 @@ class ClientSession:
         self.n_packets = 0
 
 
+def process_packet(state, sess, body, t_recv):
+    t_start = time.perf_counter_ns()
+    cfg, model = state['cfg'], state['model']
+    msg_id, _, chunks = P.unpack_data(body, NATIVE_STREAMS, sess.per_tick)
+    ready = sess.buffer.push(chunks, sess.tick_s)
+
+    predicted = False
+    pred = conf = None
+    stages = None
+
+    if ready:
+        stages = {}
+        t0 = time.perf_counter()
+        raw_window = sess.buffer.get_window()
+        stages['resampling'] = (time.perf_counter() - t0) * 1000.0
+
+        if raw_window is not None:
+            t0 = time.perf_counter()
+            if sess.runner is not None:
+                new_part = raw_window if sess.n_windows == 0 else raw_window[-cfg.HOP_SIZE:]
+                sess.runner.update(new_part)
+                mean, std = sess.runner.mean, sess.runner.std
+            else:
+                mean, std = sess.fixed_mean, sess.fixed_std
+            norm_window = apply_normalization(raw_window, mean, std)
+            stages['preprocessing'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            x = torch.FloatTensor(norm_window.transpose(1, 0)).unsqueeze(0)
+            stages['tensor_prep'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            with torch.no_grad():
+                logits = model(x)
+            stages['inference'] = (time.perf_counter() - t0) * 1000.0
+
+            t0 = time.perf_counter()
+            probs = torch.softmax(logits, dim=1).numpy()[0]
+            pred = int(probs.argmax())
+            conf = float(probs.max())
+            stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
+
+            explainer = state['explainer']
+            if explainer is not None and (
+                    state['xai_threshold'] >= 1.0 or conf < state['xai_threshold']):
+                t0 = time.perf_counter()
+                explainer.explain(norm_window)
+                stages['xai'] = (time.perf_counter() - t0) * 1000.0
+
+            predicted = True
+            sess.n_windows += 1
+
+    t_end = time.perf_counter_ns()
+    return P.pack_reply(msg_id, t_recv, t_start, t_end,
+                        predicted=predicted, pred=pred, confidence=conf,
+                        true_label=None, stages=stages)
+
+
 async def worker(state):
     """
     Tek worker: kuyrugu sirayla bosaltir, modeli calistirir, cevabi yazar.
     Bloklayici oldugu icin ikinci bir istek gelirse kuyrukta bekler --
     queuing delay tam olarak bu beklemeyi olcer.
     """
-    cfg, model, queue = state['cfg'], state['model'], state['queue']
-    explainer = state['explainer']
+    queue = state['queue']
 
     while True:
         sess, body, t_recv = await queue.get()
         try:
-            t_start = time.perf_counter_ns()
-            msg_id, t_send, chunks = P.unpack_data(body, NATIVE_STREAMS, sess.per_tick)
-            ready = sess.buffer.push(chunks, sess.tick_s)
-
-            predicted = False
-            pred = conf = None
-            stages = None
-
-            if ready:
-                stages = {}
-                t0 = time.perf_counter()
-                raw_window = sess.buffer.get_window()
-                stages['resampling'] = (time.perf_counter() - t0) * 1000.0
-
-                if raw_window is not None:
-                    t0 = time.perf_counter()
-                    if sess.runner is not None:
-                        new_part = (raw_window if sess.n_windows == 0
-                                    else raw_window[-cfg.HOP_SIZE:])
-                        sess.runner.update(new_part)
-                        m, sd = sess.runner.mean, sess.runner.std
-                    else:
-                        m, sd = sess.fixed_mean, sess.fixed_std
-                    norm_window = apply_normalization(raw_window, m, sd)
-                    stages['preprocessing'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    x = torch.FloatTensor(norm_window.transpose(1, 0)).unsqueeze(0)
-                    stages['tensor_prep'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    with torch.no_grad():
-                        logits = model(x)
-                    stages['inference'] = (time.perf_counter() - t0) * 1000.0
-
-                    t0 = time.perf_counter()
-                    probs = torch.softmax(logits, dim=1).numpy()[0]
-                    pred = int(probs.argmax())
-                    conf = float(probs.max())
-                    stages['postprocessing'] = (time.perf_counter() - t0) * 1000.0
-
-                    if explainer is not None and conf < state['xai_threshold']:
-                        t0 = time.perf_counter()
-                        explainer.explain(norm_window)
-                        stages['xai'] = (time.perf_counter() - t0) * 1000.0
-
-                    predicted = True
-                    sess.n_windows += 1
-
-            t_end = time.perf_counter_ns()
-
-            sess.writer.write(P.pack_reply(msg_id, t_recv, t_start, t_end,
-                                           predicted=predicted, pred=pred,
-                                           confidence=conf, true_label=None,
-                                           stages=stages))
+            reply = await asyncio.to_thread(process_packet, state, sess, body, t_recv)
+            sess.writer.write(reply)
             await sess.writer.drain()
         except (ConnectionResetError, BrokenPipeError):
             pass
