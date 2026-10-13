@@ -1,0 +1,214 @@
+{
+ "clock_sync": {
+  "offset_ns": -10044016923861496,
+  "rtt_ns": 89542300,
+  "uncertainty_ms": 44.77115,
+  "method": "periodik yeniden olcum + dogrusal ara deger",
+  "resync_every_s": 60.0,
+  "n_samples": 2,
+  "span_s": 1000.697257,
+  "rtt_min_ns": 70116800,
+  "rtt_max_ns": 89542300,
+  "drift_ns": -38390188,
+  "drift_ms": -38.390188,
+  "drift_ppm": -38.36343882373608,
+  "samples": [
+   {
+    "t_rel_s": 0.0,
+    "offset_ns": -10044016923861496,
+    "rtt_ns": 70116800
+   },
+   {
+    "t_rel_s": 1000.697257,
+    "offset_ns": -10044016962251684,
+    "rtt_ns": 89542300
+   }
+  ]
+ },
+ "server": {
+  "hardware": {
+   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.36",
+   "machine": "x86_64",
+   "processor": "DO-Regular",
+   "python": "3.11.9",
+   "torch": "2.14.1+cpu",
+   "package_versions": {
+    "numpy": "2.2.6",
+    "scikit-learn": "1.7.2",
+    "shap": "0.51.0",
+    "psutil": "7.0.0"
+   },
+   "server_commit": "c39487e7f05c9c140dc31ec59b7d6bd126007438",
+   "cpu_count": 1,
+   "torch_threads": 1,
+   "total_ram_mb": 1968.0,
+   "cpu_mhz_max": null
+  },
+  "resources": {
+   "process_cpu_percent": {
+    "mean": 13.51356051703878,
+    "max": 103.8,
+    "p95": 99.6,
+    "n_samples": 4255
+   },
+   "process_rss_mb": {
+    "mean": 522.308420240893,
+    "max": 666.73046875
+   },
+   "system_cpu_percent": 14.7,
+   "system_memory_percent": 45.8,
+   "process_memory_percent": 33.88
+  },
+  "sessions_peak": 1
+ },
+ "n_packets": 2000,
+ "n_predictions": 199,
+ "n_measured": 184,
+ "n_warmup_excluded": 15,
+ "wall_seconds": 1000.8017117995769,
+ "metrics": {
+  "latency": {
+   "mean_ms": 49.5848209673913,
+   "median_ms": 49.317192,
+   "p95_ms": 53.209418199999995,
+   "p99_ms": 88.44921795999987,
+   "min_ms": 37.215368,
+   "max_ms": 110.84788,
+   "std_ms": 7.25161279255623,
+   "jitter_mean_abs_delta_ms": 3.1162063387978143
+  },
+  "queuing": {
+   "mean_ms": 0.21376514130434782,
+   "median_ms": 0.175516,
+   "p95_ms": 0.4402873,
+   "p99_ms": 0.5515796699999991,
+   "min_ms": 0.116557,
+   "max_ms": 1.848811,
+   "std_ms": 0.15116336727905696,
+   "jitter_mean_abs_delta_ms": 0.10720643169398907
+  },
+  "execution": {
+   "mean_ms": 707.6835970380436,
+   "median_ms": 706.1623805,
+   "p95_ms": 856.73846575,
+   "p99_ms": 976.6535211999997,
+   "min_ms": 551.88756,
+   "max_ms": 1002.904213,
+   "std_ms": 97.34615063703204,
+   "jitter_mean_abs_delta_ms": 109.63854622404372
+  },
+  "response": {
+   "mean_ms": 806.3078173913043,
+   "median_ms": 812.2607,
+   "p95_ms": 984.52555,
+   "p99_ms": 1041.085206999999,
+   "min_ms": 600.9888,
+   "max_ms": 1125.3006,
+   "std_ms": 110.17694428702207,
+   "jitter_mean_abs_delta_ms": 126.3709038251366
+  }
+ },
+ "bandwidth": {
+  "bytes_sent": 23106000,
+  "bytes_recv": 304645,
+  "kbps_sent": 184.69992389163514,
+  "kbps_recv": 2.4352076652803247,
+  "kbps_total": 187.13513155691544
+ },
+ "server_stages": {
+  "resampling": {
+   "mean_ms": 0.8717707748038938,
+   "median_ms": 0.8493865607306361,
+   "p95_ms": 1.1745708296075463,
+   "p99_ms": 1.2510312744416283,
+   "min_ms": 0.5630669184029102,
+   "max_ms": 2.2253207862377167,
+   "std_ms": 0.1984209789758648,
+   "jitter_mean_abs_delta_ms": 0.21730388306040582
+  },
+  "preprocessing": {
+   "mean_ms": 0.2483510470483452,
+   "median_ms": 0.21868804469704628,
+   "p95_ms": 0.4697403637692331,
+   "p99_ms": 0.6024609366431831,
+   "min_ms": 0.15428196638822556,
+   "max_ms": 1.3728239573538303,
+   "std_ms": 0.1193582306215744,
+   "jitter_mean_abs_delta_ms": 0.09375913806585341
+  },
+  "tensor_prep": {
+   "mean_ms": 0.21086310279434142,
+   "median_ms": 0.17873046454042196,
+   "p95_ms": 0.4127533873543142,
+   "p99_ms": 0.5883921287022525,
+   "min_ms": 0.13021216727793217,
+   "max_ms": 1.842899015173316,
+   "std_ms": 0.14632483000800864,
+   "jitter_mean_abs_delta_ms": 0.09139648720092787
+  },
+  "inference": {
+   "mean_ms": 2.683678428065437,
+   "median_ms": 2.5220800889655948,
+   "p95_ms": 4.200605384539812,
+   "p99_ms": 6.370575116015956,
+   "min_ms": 1.8093190155923367,
+   "max_ms": 8.692832896485925,
+   "std_ms": 0.8572736778114523,
+   "jitter_mean_abs_delta_ms": 0.7142275648161036
+  },
+  "postprocessing": {
+   "mean_ms": 0.09867580324087454,
+   "median_ms": 0.09651808068156242,
+   "p95_ms": 0.12923787580803037,
+   "p99_ms": 0.16869212966412256,
+   "min_ms": 0.06977096199989319,
+   "max_ms": 0.2954220399260521,
+   "std_ms": 0.023185927421662592,
+   "jitter_mean_abs_delta_ms": 0.020352487396347065
+  },
+  "xai": {
+   "mean_ms": 703.2904236807751,
+   "median_ms": 702.2414839593694,
+   "p95_ms": 852.6121084694751,
+   "p99_ms": 972.6763939904046,
+   "min_ms": 545.981357106939,
+   "max_ms": 996.7212670017034,
+   "std_ms": 97.27674241841456,
+   "jitter_mean_abs_delta_ms": 109.62334940530604
+  }
+ },
+ "classification": {
+  "n_labeled": 182,
+  "accuracy": 1.0,
+  "stress_precision": 0.0,
+  "stress_recall": 0.0,
+  "stress_f1": 0.0,
+  "confusion": {
+   "tn": 182,
+   "fp": 0,
+   "fn": 0,
+   "tp": 0
+  }
+ },
+ "subject": "S11",
+ "config": {
+  "subjects": [
+   "S11"
+  ],
+  "n_clients": 1,
+  "tick_ms": 500,
+  "norm_mode": "running",
+  "realtime": true,
+  "open_loop": true,
+  "requested_measured_windows": 184,
+  "max_ticks": 2000,
+  "warmup_windows": 15,
+  "threads": 1,
+  "model": "wesad_best_model_f32-128_k9.pt",
+  "server": "167.71.43.64:9099",
+  "local_server": false,
+  "clock_synced": false,
+  "total_wall_s": 1002.1107376012951,
+  "clock_resync_s": 60.0
+ }
+}
