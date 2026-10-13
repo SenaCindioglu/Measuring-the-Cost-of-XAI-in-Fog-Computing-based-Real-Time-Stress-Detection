@@ -3,7 +3,19 @@
 %   [ok] coloc: asama medyanlari toplami execution %15 icinde
 %   [ok] fog: asama medyanlari toplami execution %15 icinde
 %   [ok] fogod: asama medyanlari toplami execution %15 icinde
+%   [ok] cloud: asama medyanlari toplami execution %15 icinde
 %   [ok] ayni PyTorch surumu
+%   [ok] bulut: ayni PyTorch surumu
+%   [ok] bulut: LIME / LIME-cheap aciklama orani ~2 (fark < 0.3)
+%   [ok] bulut: SHAP / SHAP-cheap aciklama orani ~4 (fark < 0.6)
+%   [ok] bulut: SHAP-cheap LIME-cheap'ten hizli (laptop gibi, Pi'nin tersi)
+%   [ok] bulut: aciklama execution suresinin >= %90'i
+%   [ok] bulut lime_cheap: WAN gecikmesine ragmen yanit Pi'den hizli
+%   [ok] bulut lime_cheap: aciklama laptoptan yavas, Pi'den hizli
+%   [ok] bulut shap_cheap: WAN gecikmesine ragmen yanit Pi'den hizli
+%   [ok] bulut shap_cheap: aciklama laptoptan yavas, Pi'den hizli
+%   [ok] bulut: tum XAI yanitlari medyanda 1 s alti (tam SHAP haric)
+%   [ok] bulut: tam SHAP medyani 1 s ustu
 %   [ok] Pi shap_cheap aciklamasi co-located'dan yavas
 %   [ok] Pi lime_cheap aciklamasi co-located'dan yavas
 %   [ok] Pi lime aciklamasi co-located'dan yavas
@@ -23,8 +35,8 @@
 %   [ok] Pi LIME-cheap response p95 1 s alti
 %   [ok] Pi tam LIME medyani 1 s ustu
 %   [ok] co-located tum aciklayicilarda p95 1 s alti
-%   [ok] tek yon gecikme medyani tum tek-istemci kosularinda < 5 ms
-%   [ok] kuyruk medyani tek istemcide <= 0.1 ms
+%   [ok] tek yon gecikme medyani tum LAN tek-istemci kosularinda < 5 ms
+%   [ok] kuyruk medyani tek istemcide <= 0.25 ms
 %   [ok] bant genisligi tum kosularda ayni (fark < %1)
 %   [ok] aciklayici yuklu iken bellek >= 1.5x
 %   [ok] XAI'siz pipeline hop'un %1'inden az
@@ -49,7 +61,7 @@
 %   [ok] sadakat farklari standart hata cubuklari icinde (cift bazinda)
 %   [ok] LIME duyarliligi SHAP'in yarisindan az
 \newif\ifvone
-\newif\ifcloud
+\newif\ifcloud \cloudtrue
 \newcommand{\ColocNoneRespMed}{7.2\xspace}  % 16_coloc/coloc_none.json
 \newcommand{\ColocNoneRespPNF}{9.3\xspace}
 \newcommand{\ColocNoneRespPNN}{12.0\xspace}
@@ -362,6 +374,127 @@
 \newcommand{\FogODShapCXaiPNF}{1{,}197\xspace}
 \newcommand{\FogODShapCPipe}{11.8\xspace}
 \newcommand{\FogODShapCXaiOverPipe}{100\xspace}
+\newcommand{\CloudNoneRespMed}{71.2\xspace}  % 17_bulut_openloop/fog_cloud_baseline_retry1.json
+\newcommand{\CloudNoneRespPNF}{151.3\xspace}
+\newcommand{\CloudNoneRespPNN}{159.3\xspace}
+\newcommand{\CloudNoneRespMean}{85.1\xspace}
+\newcommand{\CloudNoneExecMed}{4.2\xspace}
+\newcommand{\CloudNoneExecMean}{4.4\xspace}
+\newcommand{\CloudNoneLatMed}{38.96\xspace}
+\newcommand{\CloudNoneQueMed}{0.16\xspace}
+\newcommand{\CloudNoneJit}{28.8\xspace}
+\newcommand{\CloudNoneNet}{33.4\xspace}
+\newcommand{\CloudNoneRSS}{237\xspace}
+\newcommand{\CloudNoneCPU}{0.4\xspace}
+\newcommand{\CloudNoneN}{184\xspace}
+\newcommand{\CloudNoneKbps}{187.2\xspace}
+\newcommand{\CloudNoneInf}{2.5\xspace}
+\newcommand{\CloudNoneResamp}{0.85\xspace}
+\newcommand{\CloudNonePrep}{0.22\xspace}
+\newcommand{\CloudNoneTensor}{0.17\xspace}
+\newcommand{\CloudNonePost}{0.10\xspace}
+\newcommand{\CloudNoneHopPct}{0.1\xspace}
+\newcommand{\CloudNoneCap}{1{,}135\xspace}
+\newcommand{\CloudShapCRespMed}{375.2\xspace}  % 17_bulut_openloop/fog_cloud_xai_shap_ucuz.json
+\newcommand{\CloudShapCRespPNF}{458.2\xspace}
+\newcommand{\CloudShapCRespPNN}{504.2\xspace}
+\newcommand{\CloudShapCRespMean}{377.2\xspace}
+\newcommand{\CloudShapCExecMed}{271.3\xspace}
+\newcommand{\CloudShapCExecMean}{280.5\xspace}
+\newcommand{\CloudShapCLatMed}{50.89\xspace}
+\newcommand{\CloudShapCQueMed}{0.17\xspace}
+\newcommand{\CloudShapCJit}{57.1\xspace}
+\newcommand{\CloudShapCNet}{51.9\xspace}
+\newcommand{\CloudShapCRSS}{623\xspace}
+\newcommand{\CloudShapCCPU}{6.1\xspace}
+\newcommand{\CloudShapCN}{184\xspace}
+\newcommand{\CloudShapCKbps}{187.2\xspace}
+\newcommand{\CloudShapCInf}{2.5\xspace}
+\newcommand{\CloudShapCResamp}{0.80\xspace}
+\newcommand{\CloudShapCPrep}{0.22\xspace}
+\newcommand{\CloudShapCTensor}{0.17\xspace}
+\newcommand{\CloudShapCPost}{0.10\xspace}
+\newcommand{\CloudShapCHopPct}{5.4\xspace}
+\newcommand{\CloudShapCCap}{17\xspace}
+\newcommand{\CloudShapCXaiMed}{267\xspace}
+\newcommand{\CloudShapCXaiPNF}{357\xspace}
+\newcommand{\CloudShapCPipe}{4.3\xspace}
+\newcommand{\CloudShapCXaiOverPipe}{63\xspace}
+\newcommand{\CloudLimeCRespMed}{456.9\xspace}  % 17_bulut_openloop/fog_cloud_xai_limeucuz.json
+\newcommand{\CloudLimeCRespPNF}{527.4\xspace}
+\newcommand{\CloudLimeCRespPNN}{611.5\xspace}
+\newcommand{\CloudLimeCRespMean}{458.6\xspace}
+\newcommand{\CloudLimeCExecMed}{349.3\xspace}
+\newcommand{\CloudLimeCExecMean}{361.7\xspace}
+\newcommand{\CloudLimeCLatMed}{44.70\xspace}
+\newcommand{\CloudLimeCQueMed}{0.18\xspace}
+\newcommand{\CloudLimeCJit}{60.3\xspace}
+\newcommand{\CloudLimeCNet}{53.7\xspace}
+\newcommand{\CloudLimeCRSS}{581\xspace}
+\newcommand{\CloudLimeCCPU}{7.4\xspace}
+\newcommand{\CloudLimeCN}{184\xspace}
+\newcommand{\CloudLimeCKbps}{187.2\xspace}
+\newcommand{\CloudLimeCInf}{2.4\xspace}
+\newcommand{\CloudLimeCResamp}{0.88\xspace}
+\newcommand{\CloudLimeCPrep}{0.22\xspace}
+\newcommand{\CloudLimeCTensor}{0.18\xspace}
+\newcommand{\CloudLimeCPost}{0.10\xspace}
+\newcommand{\CloudLimeCHopPct}{7.0\xspace}
+\newcommand{\CloudLimeCCap}{13\xspace}
+\newcommand{\CloudLimeCXaiMed}{345\xspace}
+\newcommand{\CloudLimeCXaiPNF}{442\xspace}
+\newcommand{\CloudLimeCPipe}{3.9\xspace}
+\newcommand{\CloudLimeCXaiOverPipe}{89\xspace}
+\newcommand{\CloudLimeRespMed}{812.3\xspace}  % 17_bulut_openloop/fog_cloud_xai_lime.json
+\newcommand{\CloudLimeRespPNF}{984.5\xspace}
+\newcommand{\CloudLimeRespPNN}{1{,}041.1\xspace}
+\newcommand{\CloudLimeRespMean}{806.3\xspace}
+\newcommand{\CloudLimeExecMed}{706.2\xspace}
+\newcommand{\CloudLimeExecMean}{707.7\xspace}
+\newcommand{\CloudLimeLatMed}{49.32\xspace}
+\newcommand{\CloudLimeQueMed}{0.18\xspace}
+\newcommand{\CloudLimeJit}{126.4\xspace}
+\newcommand{\CloudLimeNet}{53.0\xspace}
+\newcommand{\CloudLimeRSS}{667\xspace}
+\newcommand{\CloudLimeCPU}{13.5\xspace}
+\newcommand{\CloudLimeN}{184\xspace}
+\newcommand{\CloudLimeKbps}{187.1\xspace}
+\newcommand{\CloudLimeInf}{2.5\xspace}
+\newcommand{\CloudLimeResamp}{0.85\xspace}
+\newcommand{\CloudLimePrep}{0.22\xspace}
+\newcommand{\CloudLimeTensor}{0.18\xspace}
+\newcommand{\CloudLimePost}{0.10\xspace}
+\newcommand{\CloudLimeHopPct}{14.1\xspace}
+\newcommand{\CloudLimeCap}{7\xspace}
+\newcommand{\CloudLimeXaiMed}{702\xspace}
+\newcommand{\CloudLimeXaiPNF}{853\xspace}
+\newcommand{\CloudLimePipe}{3.9\xspace}
+\newcommand{\CloudLimeXaiOverPipe}{179\xspace}
+\newcommand{\CloudShapRespMed}{1{,}154.4\xspace}  % 17_bulut_openloop/fog_cloud_xai_shap.json
+\newcommand{\CloudShapRespPNF}{1{,}497.8\xspace}
+\newcommand{\CloudShapRespPNN}{1{,}590.5\xspace}
+\newcommand{\CloudShapRespMean}{1{,}193.3\xspace}
+\newcommand{\CloudShapExecMed}{1{,}094.0\xspace}
+\newcommand{\CloudShapExecMean}{1{,}114.2\xspace}
+\newcommand{\CloudShapLatMed}{46.12\xspace}
+\newcommand{\CloudShapQueMed}{0.17\xspace}
+\newcommand{\CloudShapJit}{139.3\xspace}
+\newcommand{\CloudShapNet}{30.1\xspace}
+\newcommand{\CloudShapRSS}{813\xspace}
+\newcommand{\CloudShapCPU}{22.1\xspace}
+\newcommand{\CloudShapN}{184\xspace}
+\newcommand{\CloudShapKbps}{187.1\xspace}
+\newcommand{\CloudShapInf}{2.4\xspace}
+\newcommand{\CloudShapResamp}{0.84\xspace}
+\newcommand{\CloudShapPrep}{0.22\xspace}
+\newcommand{\CloudShapTensor}{0.17\xspace}
+\newcommand{\CloudShapPost}{0.09\xspace}
+\newcommand{\CloudShapHopPct}{21.9\xspace}
+\newcommand{\CloudShapCap}{4\xspace}
+\newcommand{\CloudShapXaiMed}{1{,}090\xspace}
+\newcommand{\CloudShapXaiPNF}{1{,}399\xspace}
+\newcommand{\CloudShapPipe}{4.3\xspace}
+\newcommand{\CloudShapXaiOverPipe}{255\xspace}
 \newcommand{\ColocCores}{20\xspace}
 \newcommand{\ColocRAM}{16\xspace}
 \newcommand{\ColocPy}{3.11.9\xspace}
@@ -375,6 +508,15 @@
 \newcommand{\FogPy}{3.13.5\xspace}
 \newcommand{\FogTorch}{2.14.1\xspace}
 \newcommand{\FogShapVer}{0.53.0\xspace}  % paper/pi_env.md
+\newcommand{\CloudCores}{1\xspace}
+\newcommand{\CloudRAM}{2\xspace}
+\newcommand{\CloudPy}{3.11.9\xspace}
+\newcommand{\CloudTorch}{2.14.1\xspace}
+\newcommand{\CloudShapVer}{0.51.0\xspace}
+\newcommand{\FogOverCloudXaiLimeC}{2.0\xspace}
+\newcommand{\CloudOverColocXaiLimeC}{1.2\xspace}
+\newcommand{\FogOverCloudXaiShapC}{4.3\xspace}
+\newcommand{\CloudOverColocXaiShapC}{1.3\xspace}
 \newif\ifpishapfull
 \newcommand{\FogNPoints}{three\xspace}
 \newcommand{\FogOverColocXaiShapC}{5.6\xspace}
@@ -408,7 +550,9 @@
 \newcommand{\FogGovXaiShapC}{3\xspace}
 \newcommand{\FogShapCRespMin}{1{,}149\xspace}
 \newcommand{\LatMaxAll}{4.2\xspace}
-\newcommand{\QueMaxAll}{0.1\xspace}
+\newcommand{\QueMaxAll}{0.2\xspace}
+\newcommand{\CloudNetMin}{30\xspace}
+\newcommand{\CloudNetMax}{54\xspace}
 \newcommand{\KbpsAll}{187\xspace}
 \newcommand{\RssGrowMin}{1.8\xspace}
 \newcommand{\RssGrowMax}{2.6\xspace}

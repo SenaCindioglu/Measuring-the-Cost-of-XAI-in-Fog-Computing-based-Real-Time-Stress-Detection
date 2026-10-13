@@ -106,7 +106,7 @@ measures both in one budget, on a resource-constrained fog node of the kind
 used in those studies. Our contributions are:
 \begin{enumerate}
 \item An end-to-end measurement of explanation cost inside a TCP
-client--server stress detection pipeline at two placements, using the seven
+client--server stress detection pipeline at three placements (laptop, fog, cloud), using the seven
 metrics of~\cite{erzurumluoglu2025}, an open-loop load generator and
 drift-corrected clock synchronisation (Sec.~\ref{sec:system}).
 \item Evidence that explanation accounts for \XaiShareMin--\XaiShareMax\%
@@ -145,7 +145,7 @@ Ghose et al.~\cite{ghose2025} & HRV (SWELL-KW) & classical ML & LIME & -- & edge
 Franco de la Pe\~na et al.~\cite{shats2025} & IIoT (SWaT) & BiLSTM & ShaTS & \checkmark & workstation & -- & --\\
 Warnecke et al.~\cite{warnecke2020} & security data & MLP, CNN, RNN & 6 methods & \checkmark & server & -- & --\\
 Taguta et al.~\cite{taguta2026} & cold-chain temp. & LSTM-GRU & SHAP & \checkmark & fog (Pi\,4) & lat., CPU, energy & event-trig.\\
-\textbf{Proposed} & physiological (WESAD) & 1D-CNN & LIME, SHAP (GE) & \checkmark & co-loc., fog (Pi\,4) & \checkmark{} (7 metrics) & conf.-gated\\
+\textbf{Proposed} & physiological (WESAD) & 1D-CNN & LIME, SHAP (GE) & \checkmark & co-loc., fog (Pi\,4), cloud & \checkmark{} (7 metrics) & conf.-gated\\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -332,7 +332,7 @@ differs~\cite{warnecke2020}.
 All random seeds are fixed, and explainers are warmed up when the server
 starts, outside the measurement. The model runs with one PyTorch thread;
 the numerical libraries used by the explainers (notably BLAS in LIME's
-ridge regression) keep their default multithreading on both placements.
+ridge regression) keep their default multithreading on all placements.
 
 \textbf{Gating.} Let $c$ be the maximum softmax probability of a window.
 The window is explained if and only if $c<\tau$; $\tau=0$ never explains
@@ -343,8 +343,8 @@ and $\tau=1$ always explains.
 % ======================================================================
 
 \begin{table}[t]
-\caption{Placements and software. The same PyTorch release runs on both
-servers.}
+\caption{Placements and software. The same PyTorch release runs on all
+servers; the cloud placement is described in the text.}
 \label{tab:placements}
 \centering\footnotesize
 \setlength{\tabcolsep}{3pt}
@@ -355,9 +355,9 @@ servers.}
 Hardware & Intel Core 13th gen.\ (Raptor Lake), \ColocCores logical cores & \FogModel (rev.\ \FogRev), \FogCores\x Cortex-A72, \FogGHz\,GHz\\
 Memory   & \ColocRAM\,GB & \FogRAM\,GB\\
 OS       & Windows 11 & Raspberry Pi OS 64-bit (Debian 13)\\
-Software & Python \ColocPy, PyTorch \ColocTorch (CPU), SHAP \ColocShapVer & Python \FogPy, PyTorch \FogTorch (CPU), SHAP \FogShapVer\\
+Software & Python \ColocPy, PyTorch \ColocTorch, SHAP \ColocShapVer & Python \FogPy, PyTorch \FogTorch, SHAP \FogShapVer\\
 Link     & loopback & LAN; Pi connected by Ethernet\\
-CPU gov. & default (Windows) & performance (Table~\ref{tab:profile}, Fig.~\ref{fig:cost}); on-demand (Table~\ref{tab:selective}, Sec.~\ref{sec:res-load})\\
+CPU gov. & default (Windows) & performance; on-demand in Secs.~\ref{sec:res-selective}--\ref{sec:res-load}\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -368,8 +368,9 @@ laptop and communicate over loopback; this is the lowest-latency placement
 available, not a wearable device. In the \emph{fog} placement the server
 runs on a Raspberry~Pi~4 Model~B with active cooling---the same board
 model as the fog worker of~\cite{erzurumluoglu2025}, with \FogRAM\,GB of
-memory and a \FogGHz\,GHz part against their 8\,GB at 1.8\,GHz. Below, ``laptop'' and ``co-located''
-refer to the same placement.
+memory and a \FogGHz\,GHz part against their 8\,GB at 1.8\,GHz. The
+\emph{cloud} server runs in Docker on a \CloudCores-vCPU, \CloudRAM\,GB
+VPS (Python \CloudPy, SHAP \CloudShapVer) reached over the Internet.
 
 \textbf{Protocol.} All single-client runs replay subject S11 in real time
 with causal normalisation; the first 15 windows of every client are
@@ -399,7 +400,9 @@ latency, exec.\ and resp.\ p50 are medians over windows; xai is the median
 explanation time within execution; CPU is the mean utilisation of the
 server process (100\% = one core); RSS is its peak resident memory. In
 every configuration the median queuing delay is at most \QueMaxAll\ms and
-bandwidth is about \KbpsAll\,kbps (columns omitted).}
+bandwidth is about \KbpsAll\,kbps (columns omitted).
+$^\dagger$Cloud: half of response minus execution (clock offset too
+uncertain over the Internet).}
 \label{tab:profile}
 \centering\footnotesize
 \setlength{\tabcolsep}{4.5pt}
@@ -424,11 +427,11 @@ Fog        & none       & \FogNoneLatMed & \FogNoneExecMed & -- & \FogNoneRespMe
 \fi
 \ifcloud
 \midrule
-Cloud      & none       & \CloudNoneLatMed & \CloudNoneExecMed & -- & \CloudNoneRespMed & \CloudNoneRespPNF & \CloudNoneJit & \CloudNoneCPU & \CloudNoneRSS\\
-(VPS)      & SHAP-cheap & \CloudShapCLatMed & \CloudShapCExecMed & \CloudShapCXaiMed & \CloudShapCRespMed & \CloudShapCRespPNF & \CloudShapCJit & \CloudShapCCPU & \CloudShapCRSS\\
-           & LIME-cheap & \CloudLimeCLatMed & \CloudLimeCExecMed & \CloudLimeCXaiMed & \CloudLimeCRespMed & \CloudLimeCRespPNF & \CloudLimeCJit & \CloudLimeCCPU & \CloudLimeCRSS\\
-           & LIME       & \CloudLimeLatMed & \CloudLimeExecMed & \CloudLimeXaiMed & \CloudLimeRespMed & \CloudLimeRespPNF & \CloudLimeJit & \CloudLimeCPU & \CloudLimeRSS\\
-           & SHAP       & \CloudShapLatMed & \CloudShapExecMed & \CloudShapXaiMed & \CloudShapRespMed & \CloudShapRespPNF & \CloudShapJit & \CloudShapCPU & \CloudShapRSS\\
+Cloud      & none       & \CloudNoneNet$^\dagger$ & \CloudNoneExecMed & -- & \CloudNoneRespMed & \CloudNoneRespPNF & \CloudNoneJit & \CloudNoneCPU & \CloudNoneRSS\\
+(VPS,      & SHAP-cheap & \CloudShapCNet$^\dagger$ & \CloudShapCExecMed & \CloudShapCXaiMed & \CloudShapCRespMed & \CloudShapCRespPNF & \CloudShapCJit & \CloudShapCCPU & \CloudShapCRSS\\
+\CloudCores\,vCPU) & LIME-cheap & \CloudLimeCNet$^\dagger$ & \CloudLimeCExecMed & \CloudLimeCXaiMed & \CloudLimeCRespMed & \CloudLimeCRespPNF & \CloudLimeCJit & \CloudLimeCCPU & \CloudLimeCRSS\\
+           & LIME       & \CloudLimeNet$^\dagger$ & \CloudLimeExecMed & \CloudLimeXaiMed & \CloudLimeRespMed & \CloudLimeRespPNF & \CloudLimeJit & \CloudLimeCPU & \CloudLimeRSS\\
+           & SHAP       & \CloudShapNet$^\dagger$ & \CloudShapExecMed & \CloudShapXaiMed & \CloudShapRespMed & \CloudShapRespPNF & \CloudShapJit & \CloudShapCPU & \CloudShapRSS\\
 \fi
 \bottomrule
 \end{tabular}
@@ -468,15 +471,19 @@ not transmitted.
 
 \subsection{Where to explain: compute, not network}
 \label{sec:res-place}
-The network contributes little at either placement: the median one-way
+The network contributes little on the LAN: the median one-way
 latency is \ColocNoneLatMed\ms over loopback and \FogNoneLatMed\ms to the
-Pi, and at most \LatMaxAll\ms in any single-client configuration. The
+Pi, and at most \LatMaxAll\ms in any LAN configuration; the Internet path
+to the cloud adds \CloudNetMin--\CloudNetMax\ms each way. The
 difference between placements comes from compute. Per explanation, the Pi
 is \FogOverColocXaiLimeC\x slower than the laptop for LIME-cheap,
 \FogOverColocXaiLime\x for LIME, \FogOverColocXaiShapC\x for
 SHAP-cheap\ifpishapfull{} and \FogOverColocXaiShap\x for SHAP\fi. Because the slowdown differs between explainers, their ranking
 does not transfer across platforms: SHAP-cheap is the fastest explainer on
-the laptop but slower than LIME-cheap on the Pi. All four operating points
+the laptop and the cloud but slower than LIME-cheap on the Pi. Explaining
+\FogOverCloudXaiLimeC--\FogOverCloudXaiShapC\x faster than the Pi, the
+cloud answers an explained window sooner despite its Internet path
+(\CloudShapCRespMed vs.\ \FogShapCRespMed\ms, SHAP-cheap). All four operating points
 meet the real-time criterion of~\cite{shats2025} on the laptop, but on the
 Pi only LIME-cheap does (95th percentile \FogLimeCRespPNF\ms): every
 SHAP-cheap response exceeds 1\,s (minimum \FogShapCRespMin\ms), and so does
@@ -485,7 +492,7 @@ median SHAP response (\FogShapRespMed\ms)\fi. Under explanation, the
 placement decision is therefore a decision about the compute capability of
 the node.
 
-Three observations on the Pi qualify these numbers. First, the CPU governor
+Two observations on the Pi qualify these numbers. First, the CPU governor
 matters for light workloads. Under the default on-demand governor,
 inference took a median of \FogInfIdle\ms in the run without explanation
 but \FogInfBusy\ms in runs where explanations kept the CPU busy. With the
@@ -497,11 +504,7 @@ than its peak speed for the cheap requests that dominate when
 explanations are rare. Second, LIME-cheap used on
 average \FogLimeCCores cores of the Pi while busy (mean CPU \FogLimeCCPU\%
 against a busy fraction of \FogLimeCBusy\%), because of multithreaded BLAS;
-a single-threaded LIME would be slower. Third, with LIME-cheap the median gap between response and execution
-time on the Pi is \FogLimeCResidual\ms, against \FogNoneResidual\ms
-without explanation; it spans forward latency, queuing and the reply
-path, was not isolated further, and is contained in response time and
-jitter.
+a single-threaded LIME would be slower.
 
 \subsection{Selective explanation on the fog node}
 \label{sec:res-selective}
@@ -580,13 +583,10 @@ as the throughput capacity of \FogODShapCCap users predicts, but the
 slowest response approaches the 5\,s hop. Throughput capacity is thus not
 a response-time guarantee: already with two clients the 95th-percentile
 response is \LoadTwoRespPNF\ms. Synchronised start is the worst case for
-this waiting; we did not measure clients with random phases.\footnote{These runs used a
-server version that computed on the event loop, so waiting packets were
-timestamped late and waiting appeared as latency rather than queuing delay;
-the client also awaited its periodic clock re-synchronisation in the sender
-task, delaying single sends by up to \LoadLagMax\,s. Response time, the
-only metric reported here, is measured on the client and is unaffected by
-the first issue. Both issues are fixed in the released code.}
+this waiting; we did not measure clients with random phases.\footnote{These runs used a server that computed on the event loop
+(waiting appeared as latency, not queuing; response time, measured on the
+client, is unaffected) and a client whose clock re-synchronisation delayed
+single sends by up to \LoadLagMax\,s; both are fixed in the released code.}
 
 \subsection{The calibration condition}
 \label{sec:res-calib}
@@ -667,7 +667,7 @@ choice on the fog node.
 \section{Discussion and Limitations}
 % ======================================================================
 
-\textbf{Where the architectural decision moves.} Without explanation, both
+\textbf{Where the architectural decision moves.} Without explanation, all
 placements answer well within the hop, and placement changes response time
 by tens of milliseconds at most---the same order as the differences
 between the edge, fog and cloud placements of~\cite{erzurumluoglu2025}
@@ -682,24 +682,18 @@ is \FogODShapCCap--\FogODLimeCCap users when every window is explained and
 \SelShapCCap--\SelLimeCCap with gating, while individual explained
 responses keep their single-user latency only when they do not collide.
 
-\textbf{Comparison with the reference system.} The client
-of~\cite{erzurumluoglu2025} also streams raw signals (16 channels at
-128\,Hz, 32 requests per second; 373.9\,kbps against our \KbpsAll\,kbps
-in binary frames), but its 3\,s/1\,s windowing and 24-feature random
-forest make response times not directly comparable. It reports about 20
-users per Pi worker without explanations at one decision per second;
-under our 5\,s hop, one worker sustains \FogODShapCCap--\FogODLimeCCap
-users with every window explained and \SelShapCCap--\SelLimeCCap with
-gating.
+\textbf{Reference system.} The client of~\cite{erzurumluoglu2025} also
+streams raw signals (16 channels at 128\,Hz, 32 requests/s; 373.9 vs.\
+our \KbpsAll\,kbps), but its 3\,s/1\,s windowing and feature-based
+classifier make response times not directly comparable.
 
 \textbf{Limitations.} (i) All measurements use the two validation subjects
 of the deployed checkpoint, and calibration is studied on these two only.
 (ii) Each configuration is a single run; within-run statistics rest on
 \LoadOneN--\SelShapCN windows, and between-run variance is not reported.
-In an earlier offline benchmark with \RepeatRuns alternating runs on the
-laptop, without network or explanation, run medians varied by
-\RepeatSpread\% and 95th percentiles by \RepeatSpreadPNF\%; the effects we
-draw conclusions from (\FogOverColocXaiLimeC--\FogOverColocXaiShapC\x
+In an earlier offline benchmark (\RepeatRuns runs, laptop, no network or
+explanation) run medians varied by \RepeatSpread\% and 95th percentiles by
+\RepeatSpreadPNF\%; the effects we draw conclusions from (\FogOverColocXaiLimeC--\FogOverColocXaiShapC\x
 between placements, \SelExecGainMin--\SelExecGainMax\x from gating) are far
 larger. (iii) The placements share the PyTorch release but differ in
 processor architecture, operating system, Python and SHAP version; the
@@ -708,9 +702,8 @@ placement ratio reflects the whole platform, including multithreaded BLAS
 log temperature or throttling state; the board was actively cooled.
 (iv) The gains of gating were measured on one segment with a
 \SelShapCRate\% explanation rate; they scale with the rate.
-(v) One worker per server; a cloud placement was measured earlier with a
-closed-loop client and a different software stack and is not compared
-here. (vi) The system replays recorded data at native rates; no user study
+(v) One worker per server; the single-vCPU cloud server leaves no room for
+multithreaded BLAS. (vi) The system replays recorded data at native rates; no user study
 of explanation usefulness was performed.
 
 % ======================================================================

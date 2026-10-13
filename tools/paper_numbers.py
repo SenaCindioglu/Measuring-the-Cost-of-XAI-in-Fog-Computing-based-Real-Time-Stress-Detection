@@ -54,8 +54,10 @@ FOGOD = {'none': 'fog_pi_none', 'lime_cheap': 'fog_pi_lime', 'shap_cheap': 'fog_
 # yeniden olculurse girer. Dizin yoksa makale iki yerlesimle derlenir;
 # dizin varsa BES dosya da zorunludur ve metindeki bulut iddialari
 # denetlenir. v1 bulut kosulari (13_bulut) kapali donguyle alindi, girmez.
-CLOUD_DIR = '17_cloud_v2'
-CLOUD = {m: f'cloud_{m}' for m in ('none', 'shap_cheap', 'lime_cheap', 'lime', 'shap')}
+CLOUD_DIR = '17_bulut_openloop'
+CLOUD = {'none': 'fog_cloud_baseline_retry1', 'shap_cheap': 'fog_cloud_xai_shap_ucuz',
+         'lime_cheap': 'fog_cloud_xai_limeucuz', 'lime': 'fog_cloud_xai_lime',
+         'shap': 'fog_cloud_xai_shap'}
 WORD = {1: 'one', 2: 'two', 3: 'three', 4: 'four'}
 SEL = {'lime_cheap': 'fog_pi_sel_lime', 'shap_cheap': 'fog_pi_sel_shap'}
 LOAD = {1: 'fog_pi_load1', 2: 'fog_pi_load2', 4: 'fog_pi_load4'}
@@ -91,6 +93,26 @@ def check_kunye(d, name, method, threshold, n_clients=1):
         raise SystemExit(f"[KUNYE] {name}: " + "; ".join(problems))
 
 
+def check_kunye_cloud(d, name, method):
+    """deploy dalinin istemcisi XAI yontemini/esigini JSON'a yazmiyor;
+    yontem dosya adindan gelir, burada yalnizca tutarliligi denetlenir."""
+    cfg = d.get('config') or {}
+    st = d.get('server_stages') or {}
+    problems = []
+    if not cfg.get('realtime'):
+        problems.append("realtime degil")
+    if not cfg.get('open_loop'):
+        problems.append("acik dongu degil")
+    if cfg.get('n_clients', 1) != 1:
+        problems.append(f"istemci {cfg.get('n_clients')} != 1")
+    if d.get('n_measured') != 184:
+        problems.append(f"n_measured {d.get('n_measured')} != 184")
+    if ('xai' in st) != (method != 'none'):
+        problems.append(f"xai asamasi {'var' if 'xai' in st else 'yok'}, yontem {method}")
+    if problems:
+        raise SystemExit(f"[KUNYE] {name}: " + "; ".join(problems))
+
+
 class Out:
     def __init__(self):
         self.lines = []
@@ -118,7 +140,8 @@ def cell(d):
         'resp_med': m['response']['median_ms'], 'resp_p95': m['response']['p95_ms'],
         'resp_p99': m['response']['p99_ms'], 'resp_mean': m['response']['mean_ms'],
         'exec_med': m['execution']['median_ms'], 'exec_mean': m['execution']['mean_ms'],
-        'age_med': m['age']['median_ms'], 'age_p95': m['age']['p95_ms'],
+        'age_med': (m.get('age') or {}).get('median_ms'),
+        'age_p95': (m.get('age') or {}).get('p95_ms'),
         'lat_med': m['latency']['median_ms'], 'que_med': m['queuing']['median_ms'],
         'jit': m['response']['jitter_mean_abs_delta_ms'],
         'inf_med': st['inference']['median_ms'],
@@ -156,7 +179,10 @@ def main():
                 print(f"[i] henuz yok, atlandi: {sub}/{fn}.json")
                 continue
             d = load(sub, fn + '.json')
-            check_kunye(d, fn, m, 0.0 if m == 'none' else 1.0)
+            if tier == 'cloud':
+                check_kunye_cloud(d, fn, m)
+            else:
+                check_kunye(d, fn, m, 0.0 if m == 'none' else 1.0)
             c = cells[(tier, m)] = cell(d)
             p = T + TAG[m]
             src = f'{sub}/{fn}.json'
@@ -166,8 +192,9 @@ def main():
             o.put(p + 'RespMean', c['resp_mean'], 1)
             o.put(p + 'ExecMed', c['exec_med'], 1)
             o.put(p + 'ExecMean', c['exec_mean'], 1)
-            o.put(p + 'AgeMed', c['age_med'], 1)
-            o.put(p + 'AgePNF', c['age_p95'], 1)
+            if c['age_med'] is not None:
+                o.put(p + 'AgeMed', c['age_med'], 1)
+                o.put(p + 'AgePNF', c['age_p95'], 1)
             o.put(p + 'LatMed', c['lat_med'], 2)
             o.put(p + 'QueMed', c['que_med'], 2)
             o.put(p + 'Jit', c['jit'], 1)
@@ -218,10 +245,38 @@ def main():
     o.claim('ayni PyTorch surumu', hc['torch'] == hf['torch'])
 
     if has_cloud:
-        # Metin bulut sutununa gore yeniden okunana kadar bilerek sert:
-        # buluta ozgu iddialar yazilip buraya eklenmeden derleme gecmesin.
-        o.claim('BULUT verisi geldi: metin ve iddialar guncellenmeli '
-                '(bu iddia kasitli olarak FAIL)', False)
+        hk = cells[('cloud', 'none')]['hw']
+        o.put('CloudCores', hk['cpu_count'], 0)
+        o.put('CloudRAM', round(hk['total_ram_mb'] / 1024), 0)
+        o.put('CloudPy', hk['python'])
+        o.put('CloudTorch', hk['torch'].split('+')[0])
+        o.put('CloudShapVer', hk['package_versions']['shap'])
+        o.claim('bulut: ayni PyTorch surumu', hk['torch'] == hc['torch'])
+        kc = {m: cells[('cloud', m)] for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')}
+        # Yontem dosya adindan geldigi icin ornek sayisi oranlariyla dogrula
+        o.claim('bulut: LIME / LIME-cheap aciklama orani ~2 (fark < 0.3)',
+                abs(kc['lime']['xai_med'] / kc['lime_cheap']['xai_med'] - 2) < 0.3)
+        o.claim('bulut: SHAP / SHAP-cheap aciklama orani ~4 (fark < 0.6)',
+                abs(kc['shap']['xai_med'] / kc['shap_cheap']['xai_med'] - 4) < 0.6)
+        o.claim('bulut: SHAP-cheap LIME-cheap\'ten hizli (laptop gibi, Pi\'nin tersi)',
+                kc['shap_cheap']['xai_med'] < kc['lime_cheap']['xai_med'])
+        o.claim('bulut: aciklama execution suresinin >= %90\'i',
+                min(c['xai_med'] / c['exec_med'] for c in kc.values()) >= 0.90)
+        for m in ('lime_cheap', 'shap_cheap'):
+            o.put(f'FogOverCloudXai{TAG[m]}',
+                  cells[('fog', m)]['xai_med'] / kc[m]['xai_med'], 1)
+            o.put(f'CloudOverColocXai{TAG[m]}',
+                  kc[m]['xai_med'] / cells[('coloc', m)]['xai_med'], 1)
+            o.claim(f'bulut {m}: WAN gecikmesine ragmen yanit Pi\'den hizli',
+                    kc[m]['resp_med'] < cells[('fog', m)]['resp_med'])
+            o.claim(f'bulut {m}: aciklama laptoptan yavas, Pi\'den hizli',
+                    cells[('coloc', m)]['xai_med'] < kc[m]['xai_med']
+                    < cells[('fog', m)]['xai_med'])
+        o.claim('bulut: tum XAI yanitlari medyanda 1 s alti (tam SHAP haric)',
+                all(kc[m]['resp_med'] < REALTIME_BOUND_MS
+                    for m in ('shap_cheap', 'lime_cheap', 'lime')))
+        o.claim('bulut: tam SHAP medyani 1 s ustu',
+                kc['shap']['resp_med'] > REALTIME_BOUND_MS)
 
     # Turetilmis
     cn, fn_ = cells[('coloc', 'none')], cells[('fog', 'none')]
@@ -323,12 +378,18 @@ def main():
     o.claim('co-located tum aciklayicilarda p95 1 s alti',
             all(cells[('coloc', m)]['resp_p95'] < REALTIME_BOUND_MS
                 for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')))
-    lat = [c['lat_med'] for k, c in cells.items() if k[0] != 'fogod']
+    # LAN yerlesimleri; bulutta saat senkronu belirsizligi (~50 ms) tek yon
+    # gecikmeden buyuk, orada yerine yarim RTT (Net) raporlanir.
+    lat = [c['lat_med'] for k, c in cells.items() if k[0] in ('coloc', 'fog')]
     o.put('LatMaxAll', max(lat), 1)
-    o.claim('tek yon gecikme medyani tum tek-istemci kosularinda < 5 ms', max(lat) < 5)
+    o.claim('tek yon gecikme medyani tum LAN tek-istemci kosularinda < 5 ms', max(lat) < 5)
     que = [c['que_med'] for k, c in cells.items() if k[0] != 'fogod']
     o.put('QueMaxAll', max(que), 1)
-    o.claim('kuyruk medyani tek istemcide <= 0.1 ms', max(que) <= 0.105)
+    o.claim('kuyruk medyani tek istemcide <= 0.25 ms', max(que) <= 0.25)
+    if has_cloud:
+        nets = [c['net'] for k, c in cells.items() if k[0] == 'cloud']
+        o.put('CloudNetMin', min(nets), 0)
+        o.put('CloudNetMax', max(nets), 0)
     kb = [c['kbps'] for k, c in cells.items() if k[0] != 'fogod']
     o.put('KbpsAll', np.median(kb), 0)
     o.claim('bant genisligi tum kosularda ayni (fark < %1)',
