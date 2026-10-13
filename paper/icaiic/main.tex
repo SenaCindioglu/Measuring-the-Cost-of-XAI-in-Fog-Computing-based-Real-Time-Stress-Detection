@@ -31,21 +31,25 @@
 
 \begin{document}
 
-\title{Explanation Is the Bottleneck: Measuring and Gating XAI Cost in
-Real-Time Stress Detection on a Raspberry Pi Fog Node}
+\title{Measuring and Gating the Cost of Explainable AI in Fog
+Computing-based Real-Time Stress Detection from Physiological Signals}
 
-% AUTHOR BLOCK: add the advisor (name, affiliation, e-mail) before submission.
-\author{\IEEEauthorblockN{Sena Cindio\u{g}lu}
-\IEEEauthorblockA{Dept.\ of Computer Engineering\\
-Y\i ld\i z Technical University, Istanbul, T\"urkiye}}
+% AUTHOR BLOCK: e-mail addresses to be added if required by the template.
+\author{% DIKKAT: hoca adinin yazimi e-postadan alindi ("Hafiza Irem TURKMEN
+% CILINGIR"); daha once "Hafize" yazilmisti — resmi yazimi hocaya sorun.
+\IEEEauthorblockN{Sena Al Hafez, Meryem Eldemery, and
+Hafiza \.{I}rem T\"urkmen \c{C}ilingir}
+\IEEEauthorblockA{Dept.\ of Computer Engineering, Y\i ld\i z Technical
+University, Istanbul, T\"urkiye}}
 
 \maketitle
 
 \begin{abstract}
-Post-hoc explanations are routinely attached to wearable stress
-classifiers, but the time needed to produce them is rarely measured and, to
-our knowledge, has not been measured inside a real-time physiological
-monitoring pipeline. We deploy a frozen \NParams-parameter 1D-CNN trained
+Post-hoc explanations are attached to wearable stress classifiers, but
+systematic reviews of XAI evaluation exclude run time from their scope,
+studies that explain such classifiers report accuracy without explanation
+time, and deployment studies of physiological monitoring measure transport
+metrics without explanations. We deploy a frozen \NParams-parameter 1D-CNN trained
 on WESAD as a TCP client--server system, run its server either co-located
 with the client on a laptop or on a Raspberry~Pi~4 fog node, and measure
 the seven metrics used in fog-computing studies with an open-loop sensor
@@ -54,7 +58,7 @@ server pipeline takes a median of \ColocNoneExecMed\ms per 10\,s window on
 the laptop and \FogNoneExecMed\ms on the Pi. A single region-based LIME or
 SHAP (GradientExplainer) explanation takes a median of
 \ColocXaiMin--\ColocXaiMax\ms on the laptop (four operating points) and
-\FogXaiMin--\FogXaiMax\ms on the Pi (two reduced-sample operating points),
+\FogXaiMin--\FogXaiMax\ms on the Pi (\FogNPoints operating points),
 i.e.\ \XaiShareMin--\XaiShareMax\% of the execution time. The median one-way
 network latency is at most \LatMaxAll\ms, whereas the Pi is
 \FogOverColocXaiLimeC\x slower per explanation for LIME with 250 samples
@@ -63,7 +67,7 @@ response of the latter exceeds the 1\,s real-time bound. On a
 \SelMinutes-minute segment in which \SelShapCRate\% of windows had
 confidence below 0.80, explaining only those windows reduced the mean
 execution time \SelExecGainMin--\SelExecGainMax\x and raised the throughput
-capacity of one worker from \FogShapCCap to \SelShapCCap concurrent users.
+capacity of one worker from \FogODShapCCap to \SelShapCCap concurrent users.
 Gating directs explanations to errors only where confidence is calibrated:
 at the same threshold it explains \CaughtElevenEighty of
 \ErrorsElevenEighty misclassified windows of one validation subject but
@@ -79,23 +83,25 @@ SHAP, Raspberry Pi
 \section{Introduction}
 % ======================================================================
 
-Stress detection from wearable physiological signals is well established
-on public datasets such as WESAD~\cite{schmidt2018}, and post-hoc
-explanations such as LIME~\cite{ribeiro2016} and SHAP~\cite{lundberg2017}
-are now a common companion to the classifier. These explanations are
-evaluated almost exclusively for quality. A systematic review of XAI
+Classifiers for stress detection from wearable physiological signals reach
+high reported accuracies on public datasets such as
+WESAD~\cite{schmidt2018,almadhor2025}, and post-hoc explanations such as
+LIME~\cite{ribeiro2016} and SHAP~\cite{lundberg2017} are attached to
+them~\cite{almadhor2025,elrashidy2025}. These explanations are evaluated
+for quality, not for cost: a systematic review of XAI
 evaluation explicitly excludes run time from its scope~\cite{nauta2023},
 and recent work that explains stress classifiers trained on WESAD reports
 neither inference nor explanation time~\cite{almadhor2025}. In a real-time
-monitor this omission matters: a new 10\,s window arrives every 5\,s, and
+monitor, a new 10\,s window arrives every 5\,s, and
 the time spent explaining one window is unavailable to the next window and
 to other users of the same server.
 
 Fog-computing studies of physiological monitoring measure precisely such
 system-level quantities---latency, queuing delay, execution time, response
 time, jitter, bandwidth and resource usage---but without
-explanations~\cite{erzurumluoglu2025,tuli2020healthfog}. Conversely, XAI
-cost is usually reported without a network or a deployment. This paper
+explanations~\cite{erzurumluoglu2025,tuli2020healthfog}. Conversely,
+measurements of explanation cost are made offline on workstation or
+server hardware~\cite{shats2025,warnecke2020,jethani2022}. This paper
 measures both in one budget, on a resource-constrained fog node of the kind
 used in those studies. Our contributions are:
 \begin{enumerate}
@@ -120,22 +126,52 @@ points (Secs.~\ref{sec:res-calib}, \ref{sec:res-quality}).
 \section{Related Work}
 % ======================================================================
 
+\begin{table*}[t]
+\caption{Comparison of existing studies with the proposed study
+(\checkmark{} = measured/used; -- = absent; GE = GradientExplainer).}
+\label{tab:lit}
+\centering\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{@{}l l l l c l l l@{}}
+\toprule
+\textbf{Study} & \textbf{Signals / dataset} & \textbf{Model} & \textbf{XAI} & \textbf{XAI time} & \textbf{Deployment} & \textbf{System metrics} & \textbf{Selective XAI}\\
+\midrule
+Erzurumluo\u{g}lu et al.~\cite{erzurumluoglu2025} & EEG+ECG (DREAMER) & RF & -- & -- & edge, fog (Pi\,4), cloud & \checkmark{} (7 metrics) & --\\
+Tuli et al.~\cite{tuli2020healthfog} & cardiac data & DL ensemble & -- & -- & edge, fog, cloud & \checkmark & --\\
+Gia et al.~\cite{gia2015} & ECG & wavelet feat. & -- & -- & fog gateway & \checkmark & --\\
+Almadhor et al.~\cite{almadhor2025} & WESAD (+2 sets) & 1D-CNN & \checkmark & -- & -- & -- & --\\
+El~Rashidy et al.~\cite{elrashidy2025} & facial & CNN, YOLOv8 & LIME, Grad-CAM & -- & fog & frame rate only & --\\
+Ghose et al.~\cite{ghose2025} & HRV (SWELL-KW) & classical ML & LIME & -- & edge (Jetson) & training time only & --\\
+Franco de la Pe\~na et al.~\cite{shats2025} & IIoT (SWaT) & BiLSTM & ShaTS & \checkmark & workstation & -- & --\\
+Warnecke et al.~\cite{warnecke2020} & security data & MLP, CNN, RNN & 6 methods & \checkmark & server & -- & --\\
+Taguta et al.~\cite{taguta2026} & cold-chain temp. & LSTM-GRU & SHAP & \checkmark & fog (Pi\,4) & lat., CPU, energy & event-trig.\\
+\textbf{Proposed} & physiological (WESAD) & 1D-CNN & LIME, SHAP (GE) & \checkmark & co-loc., fog (Pi\,4) & \checkmark{} (7 metrics) & conf.-gated\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 \textbf{Fog-based physiological monitoring.} Erzurumluo\u{g}lu et
 al.~\cite{erzurumluoglu2025} deploy emotion recognition on DREAMER with a
-Raspberry~Pi~4 fog worker and report the seven metrics we adopt.
-HealthFog~\cite{tuli2020healthfog} compares placements for cardiac
-diagnosis in terms of latency and energy. Neither includes explanations.
-El~Rashidy et al.~\cite{elrashidy2025} combine a fog architecture with
-LIME and Grad-CAM for emotion recognition but do not report per-window
-latency or explanation cost.
+Raspberry~Pi~4 fog worker and report the seven transport and resource
+metrics we adopt.
+Further fog health systems measure latency, energy, bandwidth and
+execution time, again without
+explanations~\cite{tuli2020healthfog,gia2015}. Conversely, studies that do attach
+explanations to such systems do not time them (Table~\ref{tab:lit}): a fog
+architecture with LIME and Grad-CAM for facial emotion recognition
+reports inference throughput but not the cost of producing an
+explanation~\cite{elrashidy2025}, a WESAD-trained 1D-CNN with
+explanations reports no times at all~\cite{almadhor2025}, and a
+LIME-based stress detector on a Jetson Orin Nano reports training times
+only~\cite{ghose2025}.
 
 \textbf{The cost of explanation.} ShaTS~\cite{shats2025} states an explicit
 real-time criterion---an explainer that needs more than 1\,s per window is
-unsuitable for real-time use---and shows KernelSHAP violating it. Reported
-costs vary by orders of magnitude with hardware, input size and estimator:
-KernelSHAP takes seconds to minutes per sample~\cite{warnecke2020,jethani2022},
-whereas amortised estimators such as FastSHAP~\cite{jethani2022} trade a
-long training phase for millisecond explanations. On a Raspberry~Pi~4,
+unsuitable for real-time use---and shows KernelSHAP violating it on
+workstation hardware. KernelSHAP needs seconds to tens of seconds per
+sample on CPUs~\cite{warnecke2020,jethani2022}, whereas amortised
+estimators such as FastSHAP~\cite{jethani2022} answer in one forward pass
+of a trained explainer, at the price of training it. On a Raspberry~Pi~4,
 conditionally triggered SHAP has been reported to add about 195\ms per
 prediction in a cold-chain monitoring deployment~\cite{taguta2026}.
 
@@ -146,7 +182,10 @@ for explanations as budgeted selective explanation~\cite{paes2024} and as
 explanations of rejected samples~\cite{artelt2023}. We do not claim the
 mechanism. We characterise it end to end in continuous physiological
 monitoring on constrained hardware, where its benefit depends on
-calibration~\cite{guo2017}.
+calibration~\cite{guo2017}. Table~\ref{tab:lit} positions this work: no
+study in the set measures explanation time inside a deployed pipeline
+together with the transport metrics, or gates explanations on model
+confidence.
 
 % ======================================================================
 \section{System and Measurement Method}
@@ -193,17 +232,27 @@ filters, kernel size 9, BatchNorm--ReLU--MaxPool--Dropout), global average
 pooling and two dense layers (\NParams parameters), trained with focal
 loss~\cite{lin2017} on 14 chest and wrist channels resampled to 64\,Hz, in
 10\,s windows with a 5\,s hop. The architecture reaches 0.92 F1 under
-15-fold leave-one-subject-out validation. % OFFLINE
+15-fold leave-one-subject-out (LOSO) validation. % OFFLINE
+The window and the architecture were fixed in preliminary offline
+experiments. Window lengths of 1, 30 and 60\,s reached F1
+scores of 0.816--0.863 there, against the 0.92 of the adopted 10\,s
+configuration,
+% OFFLINE: docs/refs/tez_pencere_taramasi_cnn.png (1 s: 81.58, 30 s:
+% 86.29, 60 s: 83.03; 50% overlap). 0.92 = balanced 10 s run (LOSO).
+and the deployed network was then
+selected by a one-factor-at-a-time sweep over depth, filter widths and
+kernel size that scored every candidate by LOSO F1 together with
+per-window inference time: the selected two-block network reached a higher
+sweep F1 than the 105K-parameter three-block baseline (0.931 against
+0.927) in two thirds of the baseline's inference time.
+% OFFLINE: docs/refs/offline_sonuclar_30agustos.pdf --
+% depth2 [32,128] k9: 49,890 params, ~0.61 ms, F1 0.9307;
+% baseline [32,64,128] k9: ~105K, ~0.89 ms, F1 0.9271.
 The deployed checkpoint was trained on 13 subjects; the remaining two, S11
 and S14, served as the validation set for checkpoint selection (validation
 F1 \ValFOne under offline, full-record normalisation). They were never used
 for training, but they are not independent test subjects; all measurements
 below are taken on them. The model is frozen and used unchanged throughout.
-A transformer from our offline study reached comparable accuracy (91.1\% on
-a single test subject) but has 37\x more parameters and needs 29\x longer
-per window on the same CPU, partly because it consumes 700\,Hz input;
-% OFFLINE: 1,859,026 vs 49,890 parameters; 103.7 vs 3.63 ms (25 Sep 2026).
-we therefore deploy the CNN.
 
 \subsection{Real-time pipeline}
 The client replays a WESAD record at the sensors' native rates (chest
@@ -226,8 +275,10 @@ drains the queue ($t_\mathrm{start}$, $t_\mathrm{end}$). We define latency
 $=t_\mathrm{recv}-t_\mathrm{send}$, queuing delay
 $=t_\mathrm{start}-t_\mathrm{recv}$, execution time
 $=t_\mathrm{end}-t_\mathrm{start}$ and response time
-$=t_\mathrm{reply}-t_\mathrm{send}$. Jitter is the mean absolute difference
-of consecutive response times, as in~\cite{erzurumluoglu2025}. Bandwidth is
+$=t_\mathrm{reply}-t_\mathrm{send}$; these definitions follow
+\cite{erzurumluoglu2025}. Jitter, the variation of response time
+in~\cite{erzurumluoglu2025}, is computed here as the mean absolute
+difference of consecutive response times. Bandwidth is
 the number of bytes exchanged per second in both directions, and resource
 usage is the mean CPU utilisation and peak resident memory (RSS) of the
 server process. Nagle's algorithm is disabled (\texttt{TCP\_NODELAY}, the
@@ -237,22 +288,20 @@ default of Python's asyncio).
 the next tick is a \emph{closed} load generator. When an explanation takes
 longer than one tick, the emulated sensor pauses and the waiting time is
 omitted from the measurement, which is the coordinated-omission problem of
-closed-loop benchmarking~\cite{schroeder2006}. In a check on the laptop
-with an earlier software stack (PyTorch \LoopClosedTorch) and the
+closed-loop benchmarking~\cite{schroeder2006}. In a check with the
 200-sample SHAP explainer, a closed-loop client delayed its sends by
-\LoopClosedLagPNF\ms at the 95th percentile of \LoopClosedPackets packets.
-Our client is open-loop: a sender task emits every tick on schedule,
-independently of a receiver task. Its send lag on the Pi stayed below
-\PiLagPNFMax\ms at the 95th percentile in every single-client run.
+\LoopClosedLagPNF\ms at the 95th percentile. Our client is
+open-loop---a sender task emits every tick on schedule, independently of
+a receiver task---and its send lag on the Pi stayed below \PiLagPNFMax\ms
+at the 95th percentile in every single-client run.
 
-\textbf{Clocks.} One-way latency requires the client and server clocks.
-We use monotonic clocks and estimate their offset NTP-style from the
-minimum-RTT exchange of 12 ping rounds at connection set-up~\cite{mills1991}.
-Crystal drift made a single estimate produce negative latencies in long
-runs, so the offset is re-estimated every 60\,s (4 rounds) and
-interpolated linearly for every packet. We report as uncertainty half of
-the median, over re-estimations, of the minimum RTT; it was at most
-\ClockUncMax\ms in the runs reported here.
+\textbf{Clocks.} One-way latency requires both clocks: we estimate the
+offset of the two monotonic clocks NTP-style from minimum-RTT ping
+exchanges~\cite{mills1991}. Because crystal drift turned one-off
+estimates into negative latencies in long runs, the offset is
+re-estimated every 60\,s and interpolated linearly per packet; the
+resulting uncertainty (half the median minimum RTT) was at most
+\ClockUncMax\ms.
 
 \subsection{Explainers and confidence gating}
 \textbf{Region-based LIME.} Each $14\times640$ window is divided into 20
@@ -262,8 +311,24 @@ fitted by ridge regression. We use 500 samples (\emph{LIME}) and 250
 samples (\emph{LIME-cheap}). \textbf{SHAP.} SHAP's GradientExplainer
 (expected gradients~\cite{erion2021}) with a fixed 100-window $k$-means
 background drawn from training subjects in the causal input space, using
-200 samples (\emph{SHAP}) and 50 samples (\emph{SHAP-cheap}). This
-estimator is not KernelSHAP, whose cost structure differs~\cite{warnecke2020}.
+200 samples (\emph{SHAP}) and 50 samples (\emph{SHAP-cheap}). These
+operating points come from a one-factor-at-a-time sweep in the same
+preliminary experiments over LIME's sample count, segment count and kernel
+width, and over SHAP's background size, sample count and background-summary
+method, with every setting scored by faithfulness, monotonicity,
+sensitivity and latency; within that sweep, the cheap sample counts kept
+the quality score within 4.9\% (LIME) and 1.4\% (SHAP) of the best setting
+while running 2.3\x and 8.6\x faster than the largest sample counts tried.
+% OFFLINE: docs/refs/offline_sonuclar_30agustos.pdf (LIME samples250:
+% -4.9%, 2.3x; SHAP nsamples50: -1.4%, 8.6x).
+A cheap point thus runs the same algorithm with a smaller sample count,
+and its cost scales with that count: on the laptop, halving LIME's samples
+gives \ColocLimeCXaiMed against \ColocLimeXaiMed\ms per explanation and
+quartering SHAP's gives \ColocShapCXaiMed against \ColocShapXaiMed\ms
+(Table~\ref{tab:profile}), with no measurable faithfulness difference
+between the four points (Sec.~\ref{sec:res-quality}). The
+GradientExplainer is not KernelSHAP, whose cost structure
+differs~\cite{warnecke2020}.
 All random seeds are fixed, and explainers are warmed up when the server
 starts, outside the measurement. The model runs with one PyTorch thread;
 the numerical libraries used by the explainers (notably BLAS in LIME's
@@ -292,6 +357,7 @@ Memory   & \ColocRAM\,GB & \FogRAM\,GB\\
 OS       & Windows 11 & Raspberry Pi OS 64-bit (Debian 13)\\
 Software & Python \ColocPy, PyTorch \ColocTorch (CPU), SHAP \ColocShapVer & Python \FogPy, PyTorch \FogTorch (CPU), SHAP \FogShapVer\\
 Link     & loopback & LAN; Pi connected by Ethernet\\
+CPU gov. & default (Windows) & performance (Table~\ref{tab:profile}, Fig.~\ref{fig:cost}); on-demand (Table~\ref{tab:selective}, Sec.~\ref{sec:res-load})\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -300,21 +366,24 @@ Link     & loopback & LAN; Pi connected by Ethernet\\
 placement the client and the server run as separate processes on the same
 laptop and communicate over loopback; this is the lowest-latency placement
 available, not a wearable device. In the \emph{fog} placement the server
-runs on a Raspberry~Pi~4 with active cooling, the same board family as the
-worker of~\cite{erzurumluoglu2025}. Below, ``laptop'' and ``co-located''
+runs on a Raspberry~Pi~4 Model~B with active cooling---the same board
+model as the fog worker of~\cite{erzurumluoglu2025}, with \FogRAM\,GB of
+memory and a \FogGHz\,GHz part against their 8\,GB at 1.8\,GHz. Below, ``laptop'' and ``co-located''
 refer to the same placement.
 
 \textbf{Protocol.} All single-client runs replay subject S11 in real time
 with causal normalisation; the first 15 windows of every client are
-discarded as warm-up. Each configuration is measured in one run. Runs with
-a fixed policy (no explanation, or explanation of every window) last
-\AlwMinutes minutes (\FogNoneN measured windows from the baseline segment
-of the record, which contains no stress); selective runs last \SelMinutes
-minutes (\SelShapCN windows, spanning baseline and stress); multi-client
-runs replay S11 and S14 alternately for 5 minutes. A new decision every
-5\,s is a design choice for monitoring a slowly varying state; it differs
-from the 3\,s window and 1\,s hop of~\cite{erzurumluoglu2025}, so timing
-results are not directly comparable with that study. We define the
+discarded as warm-up. Each configuration is measured in one run. The
+single-client profile of the Pi (Table~\ref{tab:profile}) was measured with
+the CPU governor set to \emph{performance}; the selective and multi-client
+runs used the default \emph{on-demand} governor and are compared only with
+always-explain runs under the same governor. Fixed-policy runs (no explanation, or explanation of every window) last
+\AlwMinutes minutes (\FogNoneN windows, the stress-free baseline segment
+of the record); selective runs last \SelMinutes minutes (\SelShapCN
+windows, spanning baseline and stress); multi-client runs replay S11 and
+S14 alternately for 5 minutes. The 10\,s window is the length the model
+was trained with, and the 5\,s hop reproduces the 50\% window overlap of
+training. We define the
 \emph{throughput capacity} of a worker as the hop divided by the mean
 execution time: the number of clients it can keep up with, regardless of
 how long an individual response takes.
@@ -324,45 +393,75 @@ how long an individual response takes.
 % ======================================================================
 
 \begin{table*}[t]
-\caption{Seven-metric profile per placement and explainer, one client
-(ms unless stated). Server columns and the first response column are
-medians over windows; xai is the explanation time within execution;
-CPU is the mean utilisation of the server process (100\% = one core);
-RSS is its peak resident memory.}
+\caption{Placement comparison, one client, 184 measured windows per
+configuration (ms unless stated; Pi with the performance CPU governor).
+latency, exec.\ and resp.\ p50 are medians over windows; xai is the median
+explanation time within execution; CPU is the mean utilisation of the
+server process (100\% = one core); RSS is its peak resident memory. In
+every configuration the median queuing delay is at most \QueMaxAll\ms and
+bandwidth is about \KbpsAll\,kbps (columns omitted).}
 \label{tab:profile}
 \centering\footnotesize
-\setlength{\tabcolsep}{3.6pt}
-\begin{tabular}{@{}ll r rrrr rrr rrr@{}}
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{@{}ll rrr rrr rr@{}}
 \toprule
-& & & \multicolumn{4}{c}{\textbf{Server (median)}} & \multicolumn{3}{c}{\textbf{Client}} & \multicolumn{3}{c}{\textbf{Resources}}\\
-\cmidrule(lr){4-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}
-\textbf{Placement} & \textbf{Explainer} & \textbf{Win.} & latency & queue & exec. & xai & resp.\ p50 & p95 & jitter & CPU\,\% & RSS\,MB & kbps\\
+& & \multicolumn{3}{c}{\textbf{Server}} & \multicolumn{3}{c}{\textbf{Client}} & \multicolumn{2}{c}{\textbf{Resources}}\\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}\cmidrule(lr){9-10}
+\textbf{Placement} & \textbf{Explainer} & latency & exec. & xai & resp.\ p50 & resp.\ p95 & jitter & CPU\,\% & RSS\,MB\\
 \midrule
-Co-located & none       & \ColocNoneN & \ColocNoneLatMed & \ColocNoneQueMed & \ColocNoneExecMed & -- & \ColocNoneRespMed & \ColocNoneRespPNF & \ColocNoneJit & \ColocNoneCPU & \ColocNoneRSS & \ColocNoneKbps\\
-           & SHAP-cheap & \ColocShapCN & \ColocShapCLatMed & \ColocShapCQueMed & \ColocShapCExecMed & \ColocShapCXaiMed & \ColocShapCRespMed & \ColocShapCRespPNF & \ColocShapCJit & \ColocShapCCPU & \ColocShapCRSS & \ColocShapCKbps\\
-           & LIME-cheap & \ColocLimeCN & \ColocLimeCLatMed & \ColocLimeCQueMed & \ColocLimeCExecMed & \ColocLimeCXaiMed & \ColocLimeCRespMed & \ColocLimeCRespPNF & \ColocLimeCJit & \ColocLimeCCPU & \ColocLimeCRSS & \ColocLimeCKbps\\
-           & LIME       & \ColocLimeN & \ColocLimeLatMed & \ColocLimeQueMed & \ColocLimeExecMed & \ColocLimeXaiMed & \ColocLimeRespMed & \ColocLimeRespPNF & \ColocLimeJit & \ColocLimeCPU & \ColocLimeRSS & \ColocLimeKbps\\
-           & SHAP       & \ColocShapN & \ColocShapLatMed & \ColocShapQueMed & \ColocShapExecMed & \ColocShapXaiMed & \ColocShapRespMed & \ColocShapRespPNF & \ColocShapJit & \ColocShapCPU & \ColocShapRSS & \ColocShapKbps\\
+Co-located & none       & \ColocNoneLatMed & \ColocNoneExecMed & -- & \ColocNoneRespMed & \ColocNoneRespPNF & \ColocNoneJit & \ColocNoneCPU & \ColocNoneRSS\\
+(laptop)   & SHAP-cheap & \ColocShapCLatMed & \ColocShapCExecMed & \ColocShapCXaiMed & \ColocShapCRespMed & \ColocShapCRespPNF & \ColocShapCJit & \ColocShapCCPU & \ColocShapCRSS\\
+           & LIME-cheap & \ColocLimeCLatMed & \ColocLimeCExecMed & \ColocLimeCXaiMed & \ColocLimeCRespMed & \ColocLimeCRespPNF & \ColocLimeCJit & \ColocLimeCCPU & \ColocLimeCRSS\\
+           & LIME       & \ColocLimeLatMed & \ColocLimeExecMed & \ColocLimeXaiMed & \ColocLimeRespMed & \ColocLimeRespPNF & \ColocLimeJit & \ColocLimeCPU & \ColocLimeRSS\\
+           & SHAP       & \ColocShapLatMed & \ColocShapExecMed & \ColocShapXaiMed & \ColocShapRespMed & \ColocShapRespPNF & \ColocShapJit & \ColocShapCPU & \ColocShapRSS\\
 \midrule
-Fog (Pi\,4)& none       & \FogNoneN & \FogNoneLatMed & \FogNoneQueMed & \FogNoneExecMed & -- & \FogNoneRespMed & \FogNoneRespPNF & \FogNoneJit & \FogNoneCPU & \FogNoneRSS & \FogNoneKbps\\
-           & LIME-cheap & \FogLimeCN & \FogLimeCLatMed & \FogLimeCQueMed & \FogLimeCExecMed & \FogLimeCXaiMed & \FogLimeCRespMed & \FogLimeCRespPNF & \FogLimeCJit & \FogLimeCCPU & \FogLimeCRSS & \FogLimeCKbps\\
-           & SHAP-cheap & \FogShapCN & \FogShapCLatMed & \FogShapCQueMed & \FogShapCExecMed & \FogShapCXaiMed & \FogShapCRespMed & \FogShapCRespPNF & \FogShapCJit & \FogShapCCPU & \FogShapCRSS & \FogShapCKbps\\
+Fog        & none       & \FogNoneLatMed & \FogNoneExecMed & -- & \FogNoneRespMed & \FogNoneRespPNF & \FogNoneJit & \FogNoneCPU & \FogNoneRSS\\
+(Pi\,4)    & SHAP-cheap & \FogShapCLatMed & \FogShapCExecMed & \FogShapCXaiMed & \FogShapCRespMed & \FogShapCRespPNF & \FogShapCJit & \FogShapCCPU & \FogShapCRSS\\
+           & LIME-cheap & \FogLimeCLatMed & \FogLimeCExecMed & \FogLimeCXaiMed & \FogLimeCRespMed & \FogLimeCRespPNF & \FogLimeCJit & \FogLimeCCPU & \FogLimeCRSS\\
+           & LIME       & \FogLimeLatMed & \FogLimeExecMed & \FogLimeXaiMed & \FogLimeRespMed & \FogLimeRespPNF & \FogLimeJit & \FogLimeCPU & \FogLimeRSS\\
+\ifpishapfull
+           & SHAP       & \FogShapLatMed & \FogShapExecMed & \FogShapXaiMed & \FogShapRespMed & \FogShapRespPNF & \FogShapJit & \FogShapCPU & \FogShapRSS\\
+\fi
+\ifcloud
+\midrule
+Cloud      & none       & \CloudNoneLatMed & \CloudNoneExecMed & -- & \CloudNoneRespMed & \CloudNoneRespPNF & \CloudNoneJit & \CloudNoneCPU & \CloudNoneRSS\\
+(VPS)      & SHAP-cheap & \CloudShapCLatMed & \CloudShapCExecMed & \CloudShapCXaiMed & \CloudShapCRespMed & \CloudShapCRespPNF & \CloudShapCJit & \CloudShapCCPU & \CloudShapCRSS\\
+           & LIME-cheap & \CloudLimeCLatMed & \CloudLimeCExecMed & \CloudLimeCXaiMed & \CloudLimeCRespMed & \CloudLimeCRespPNF & \CloudLimeCJit & \CloudLimeCCPU & \CloudLimeCRSS\\
+           & LIME       & \CloudLimeLatMed & \CloudLimeExecMed & \CloudLimeXaiMed & \CloudLimeRespMed & \CloudLimeRespPNF & \CloudLimeJit & \CloudLimeCPU & \CloudLimeRSS\\
+           & SHAP       & \CloudShapLatMed & \CloudShapExecMed & \CloudShapXaiMed & \CloudShapRespMed & \CloudShapRespPNF & \CloudShapJit & \CloudShapCPU & \CloudShapRSS\\
+\fi
 \bottomrule
 \end{tabular}
 \end{table*}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_cost.pdf}
+\caption{Median response time per window by explainer and placement, one
+client (tick = 95th percentile; generated from the same runs as
+Table~\ref{tab:profile}). The 1\,s line is the real-time criterion
+of~\cite{shats2025}; the 5\,s line is the hop.}
+\label{fig:cost}
+\end{figure}
+
 \subsection{Explanation dominates the pipeline}
 \label{sec:res-cost}
-Table~\ref{tab:profile} profiles every configuration. Without explanation,
-the server spends a median of \ColocNoneExecMed\ms per window on
-resampling, normalisation and inference on the laptop and
-\FogNoneExecMed\ms on the Pi, well under 1\% of the 5\,s hop. A single
+Table~\ref{tab:profile} and Fig.~\ref{fig:cost} profile every
+configuration. Without explanation,
+the server spends a median of \ColocNoneExecMed\ms per window on the
+laptop and \FogNoneExecMed\ms on the Pi, well under 1\% of the 5\,s hop.
+On the Pi this divides into \FogNoneResamp\ms for resampling the native
+streams to 64\,Hz, \FogNonePrep\ms for causal normalisation,
+\FogNoneTensor\ms for tensor preparation, \FogNoneInf\ms for inference and
+\FogNonePost\ms for post-processing (stage medians); the laptop profile
+has the same composition with \ColocNoneInf\ms of inference, so every
+stage of the pipeline fits the real-time budget on both nodes. A single
 explanation costs a median of \ColocXaiMin--\ColocXaiMax\ms on the laptop
 and \FogXaiMin--\FogXaiMax\ms on the Pi and accounts for
 \XaiShareMin--\XaiShareMax\% of execution time in every explained
 configuration. Enabling an explainer raises peak server memory by a factor
 of \RssGrowMin--\RssGrowMax (e.g.\ from \FogNoneRSS to \FogLimeCRSS\,MB on
-the Pi), which matters on a 4\,GB node. With one client the median queuing
+the Pi, \FogRssPct\% of its memory). With one client the median queuing
 delay is at most \QueMaxAll\ms, and bandwidth is about \KbpsAll\,kbps in
 every configuration, because explanations are computed on the server and
 not transmitted.
@@ -373,43 +472,45 @@ The network contributes little at either placement: the median one-way
 latency is \ColocNoneLatMed\ms over loopback and \FogNoneLatMed\ms to the
 Pi, and at most \LatMaxAll\ms in any single-client configuration. The
 difference between placements comes from compute. Per explanation, the Pi
-is \FogOverColocXaiLimeC\x slower than the laptop for LIME-cheap and
-\FogOverColocXaiShapC\x slower for SHAP-cheap. Because the slowdown differs
-between explainers, their ranking does not transfer across platforms:
-SHAP-cheap is the fastest explainer on the laptop but the slower of the two
-on the Pi. On the Pi every SHAP-cheap response exceeds 1\,s (minimum
-\FogShapCRespMin\ms), violating the real-time criterion
-of~\cite{shats2025}, whereas LIME-cheap stays within it (95th percentile
-\FogLimeCRespPNF\ms), as do all four operating points on the laptop. Under
-explanation, the placement decision is therefore a decision about the
-compute capability of the node.
+is \FogOverColocXaiLimeC\x slower than the laptop for LIME-cheap,
+\FogOverColocXaiLime\x for LIME, \FogOverColocXaiShapC\x for
+SHAP-cheap\ifpishapfull{} and \FogOverColocXaiShap\x for SHAP\fi. Because the slowdown differs between explainers, their ranking
+does not transfer across platforms: SHAP-cheap is the fastest explainer on
+the laptop but slower than LIME-cheap on the Pi. All four operating points
+meet the real-time criterion of~\cite{shats2025} on the laptop, but on the
+Pi only LIME-cheap does (95th percentile \FogLimeCRespPNF\ms): every
+SHAP-cheap response exceeds 1\,s (minimum \FogShapCRespMin\ms), and so does
+the median LIME response (\FogLimeRespMed\ms)\ifpishapfull{} and the
+median SHAP response (\FogShapRespMed\ms)\fi. Under explanation, the
+placement decision is therefore a decision about the compute capability of
+the node.
 
-Three observations on the Pi qualify these numbers. First, the stages that
-run without explanation are slower when the processor is mostly idle:
-inference takes a median of \FogInfIdle\ms in the run without explanation
-but \FogInfBusy\ms in runs where explanations keep the CPU busy. This
-\FogDvfs\x difference is consistent with on-demand frequency scaling; the
-CPU governor was not pinned and the throttling state was not logged in
-these runs. Explanation runs also changed inference time on the laptop
-(\ColocNoneInf\ms without explanation, \ColocShapCInf\ms with SHAP-cheap),
-so frequency scaling need not be the only cause. Second, LIME-cheap used on
+Three observations on the Pi qualify these numbers. First, the CPU governor
+matters for light workloads. Under the default on-demand governor,
+inference took a median of \FogInfIdle\ms in the run without explanation
+but \FogInfBusy\ms in runs where explanations kept the CPU busy. With the
+performance governor the difference disappears (\FogInfPerf versus
+\FogInfBusyPerf\ms), and the execution time without explanation falls from
+\FogODNoneExecMed to \FogNoneExecMed\ms (\FogGovGain\x), while explanation
+time changes by at most \FogGovXaiLimeC\%. An idle fog node is thus slower
+than its peak speed for the cheap requests that dominate when
+explanations are rare. Second, LIME-cheap used on
 average \FogLimeCCores cores of the Pi while busy (mean CPU \FogLimeCCPU\%
 against a busy fraction of \FogLimeCBusy\%), because of multithreaded BLAS;
-a single-threaded LIME would be slower. Third, with LIME-cheap the median
-per-window difference between response and execution time is
-\FogLimeCResidual\ms on the Pi, against \FogNoneResidual\ms without
-explanation and \FogShapCResidual\ms with SHAP-cheap. This difference
-contains forward latency, queuing and the reply path; we did not isolate
-its source, and it is included in response time and jitter.
+a single-threaded LIME would be slower. Third, with LIME-cheap the median gap between response and execution
+time on the Pi is \FogLimeCResidual\ms, against \FogNoneResidual\ms
+without explanation; it spans forward latency, queuing and the reply
+path, was not isolated further, and is contained in response time and
+jitter.
 
 \subsection{Selective explanation on the fog node}
 \label{sec:res-selective}
 
 \begin{table}[t]
-\caption{Always versus selective ($\tau=0.80$) explanation on the Pi.
-Means are reported because selective runs are bimodal. Always-runs cover
-the first \AlwMinutes minutes of S11, selective runs the first
-\SelMinutes; Users is the throughput capacity.}
+\caption{Always versus selective ($\tau=0.80$) explanation on the Pi, both
+under the on-demand governor. Means are reported because selective runs are
+bimodal. Always-runs cover the first \AlwMinutes minutes of S11, selective
+runs the first \SelMinutes; Users is the throughput capacity.}
 \label{tab:selective}
 \centering\footnotesize
 \setlength{\tabcolsep}{2.4pt}
@@ -419,9 +520,9 @@ the first \AlwMinutes minutes of S11, selective runs the first
 \cmidrule(lr){5-6}
 \textbf{Explainer} & \textbf{Policy} & \textbf{Win.} & \textbf{Expl.} & mean & p50 & \textbf{mean} & \textbf{Users}\\
 \midrule
-LIME-cheap & always    & \FogLimeCN & 100\%            & \FogLimeCExecMean & \FogLimeCExecMed & \FogLimeCRespMean & \FogLimeCCap\\
+LIME-cheap & always    & \FogODLimeCN & 100\%            & \FogODLimeCExecMean & \FogODLimeCExecMed & \FogODLimeCRespMean & \FogODLimeCCap\\
            & selective & \SelLimeCN & \SelLimeCRate\%  & \SelLimeCExecMean & \SelLimeCExecMed & \SelLimeCRespMean & \SelLimeCCap\\
-SHAP-cheap & always    & \FogShapCN & 100\%            & \FogShapCExecMean & \FogShapCExecMed & \FogShapCRespMean & \FogShapCCap\\
+SHAP-cheap & always    & \FogODShapCN & 100\%            & \FogODShapCExecMean & \FogODShapCExecMed & \FogODShapCRespMean & \FogODShapCCap\\
            & selective & \SelShapCN & \SelShapCRate\%  & \SelShapCExecMean & \SelShapCExecMed & \SelShapCRespMean & \SelShapCCap\\
 \bottomrule
 \end{tabular}
@@ -432,17 +533,14 @@ fell below the threshold---the same windows for both explainers, because
 the decision depends only on the model (Table~\ref{tab:selective}). Mean
 execution time dropped \SelLimeCExecGain\x for LIME-cheap and
 \SelShapCExecGain\x for SHAP-cheap, and throughput capacity rose from
-\FogLimeCCap to \SelLimeCCap and from \FogShapCCap to \SelShapCCap
+\FogODLimeCCap to \SelLimeCCap and from \FogODShapCCap to \SelShapCCap
 users. The median window is not explained (median execution
 \SelShapCExecMed\ms), so the mean is the relevant cost measure. An
-explained window costs as much as before: the mean explanation time in the
-selective runs differs from the always-explain runs by at most
-\SelPerExplDiffMax\%, so the different segments covered by the two kinds of
-run do not affect the comparison. All explained SHAP-cheap windows still
-took more than 1\,s (\SelShapCExplRespMin--\SelShapCExplRespMax\ms), and
-all explained LIME-cheap windows less (\SelLimeCExplRespMin--\SelLimeCExplRespMax\ms).
-Gating therefore reduces the average load, not the latency of an
-explained window.
+explained window costs as much as before (per-explanation means within
+\SelPerExplDiffMax\% of the always-explain runs): every explained
+SHAP-cheap window still exceeds 1\,s and every explained LIME-cheap
+window stays below it, so gating reduces the average load, not the
+latency of an explained window.
 
 Because both component costs carry over unchanged, the mean execution time
 of a selective run follows from them: the mean without explanation plus
@@ -457,41 +555,32 @@ explains \RateElevenEighty\% at the same threshold.
 \subsection{Several users on one fog worker}
 \label{sec:res-load}
 
-\begin{table}[t]
-\caption{Several clients on one Pi worker, SHAP-cheap on every window
-(pooled over clients, ms). Utilisation is $N\times$ mean execution / 5\,s.
-Predictions assume clients that start together, so that the $k$-th client
-served waits behind $k-1$ explanations.}
-\label{tab:load}
-\centering\footnotesize
-\setlength{\tabcolsep}{3.6pt}
-\begin{tabular}{@{}r r r rr rr@{}}
-\toprule
-& & & \multicolumn{2}{c}{\textbf{Resp.\ mean}} & \multicolumn{2}{c}{\textbf{Resp.\ p95}}\\
-\cmidrule(lr){4-5}\cmidrule(lr){6-7}
-\textbf{Clients} & \textbf{Win.} & \textbf{Util.} & meas. & pred. & meas. & pred.\\
-\midrule
-1 & \LoadOneN  & \LoadOneUtil\%  & \LoadOneRespMean  & \LoadOnePredMean  & \LoadOneRespPNF  & \LoadOnePredMax\\
-2 & \LoadTwoN  & \LoadTwoUtil\%  & \LoadTwoRespMean  & \LoadTwoPredMean  & \LoadTwoRespPNF  & \LoadTwoPredMax\\
-4 & \LoadFourN & \LoadFourUtil\% & \LoadFourRespMean & \LoadFourPredMean & \LoadFourRespPNF & \LoadFourPredMax\\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_load.pdf}
+\caption{Pooled response time of one Pi worker serving $N$ synchronised
+clients, SHAP-cheap on every window (44 windows per client, on-demand
+governor). Bars are measured; black dashes are the queuing model,
+$(N{+}1)E/2$ for the mean and $NE$ for the 95th percentile, with $E$ the
+run's mean execution time.}
+\label{fig:load}
+\end{figure}
 
-Table~\ref{tab:load} runs one, two and four clients against the Pi with
-SHAP-cheap on every window. The clients start together, so their windows
-complete at the same instants and their explanations are served back to
-back. With $N$ clients and mean execution time $E$ (\LoadExec\ms with four
-clients; each prediction uses the $E$ of its own run), the response of the
-$k$-th client served is about $kE$. The mean response is therefore
-$(N+1)E/2$ and the 95th percentile approaches $NE$; both predictions agree
-with the measurements within \LoadErrMax\%. At four clients the worker is
-\LoadFourUtil\% utilised and keeps up with the load, as the throughput
-capacity of \FogShapCCap users predicts, but the slowest response
-approaches the 5\,s hop. Throughput capacity is thus not a response-time
-guarantee: already with two clients the 95th-percentile response is
-\LoadTwoRespPNF\ms. Synchronised start is the worst case for this waiting; we
-did not measure clients with random phases.\footnote{These runs used a
+One, two and four clients were run against the Pi with SHAP-cheap on
+every window (44 measured windows per client, pooled over clients; the
+on-demand governor, as in Table~\ref{tab:selective}). The clients start
+together, so their windows complete at the same instants and their
+explanations are served back to back: with $N$ clients and mean execution
+time $E$ of the run, the response of the $k$-th client served is about
+$kE$, the mean response is $(N+1)E/2$, and the 95th percentile approaches
+$NE$. The measurements agree with this model within \LoadErrMax\%
+(Fig.~\ref{fig:load}). At four
+clients the worker is \LoadFourUtil\% utilised and keeps up with the load,
+as the throughput capacity of \FogODShapCCap users predicts, but the
+slowest response approaches the 5\,s hop. Throughput capacity is thus not
+a response-time guarantee: already with two clients the 95th-percentile
+response is \LoadTwoRespPNF\ms. Synchronised start is the worst case for
+this waiting; we did not measure clients with random phases.\footnote{These runs used a
 server version that computed on the event loop, so waiting packets were
 timestamped late and waiting appeared as latency rather than queuing delay;
 the client also awaited its periodic clock re-synchronisation in the sender
@@ -579,23 +668,29 @@ choice on the fog node.
 % ======================================================================
 
 \textbf{Where the architectural decision moves.} Without explanation, both
-placements answer well within the hop, and the choice between them is a
-latency choice, as in~\cite{erzurumluoglu2025}. With explanation, two other
+placements answer well within the hop, and placement changes response time
+by tens of milliseconds at most---the same order as the differences
+between the edge, fog and cloud placements of~\cite{erzurumluoglu2025}
+(mean response times 22.5, 43.3 and 73.3\ms). With explanation, two other
 parameters dominate: the compute capability of the node, which changes the
 cost of an explanation by up to \FogOverColocXaiShapC\x, and the triggering
 policy, which changes the mean cost by
 \SelExecGainMin--\SelExecGainMax\x on our segment. On a Raspberry~Pi~4,
 explaining every window meets the 1\,s criterion for a single user with
 LIME-cheap but not with SHAP-cheap; the throughput capacity of one worker
-is \FogShapCCap--\FogLimeCCap users when every window is explained and
+is \FogODShapCCap--\FogODLimeCCap users when every window is explained and
 \SelShapCCap--\SelLimeCCap with gating, while individual explained
 responses keep their single-user latency only when they do not collide.
 
-\textbf{Comparison with the reference system.} Only bandwidth is directly
-comparable, because the hardware and windowing differ: streaming the raw
-multichannel signal costs \KbpsAll\,kbps, whereas sending 24 extracted
-features at 32 requests per second costs 373.9\,kbps
-in~\cite{erzurumluoglu2025}.
+\textbf{Comparison with the reference system.} The client
+of~\cite{erzurumluoglu2025} also streams raw signals (16 channels at
+128\,Hz, 32 requests per second; 373.9\,kbps against our \KbpsAll\,kbps
+in binary frames), but its 3\,s/1\,s windowing and 24-feature random
+forest make response times not directly comparable. It reports about 20
+users per Pi worker without explanations at one decision per second;
+under our 5\,s hop, one worker sustains \FogODShapCCap--\FogODLimeCCap
+users with every window explained and \SelShapCCap--\SelLimeCCap with
+gating.
 
 \textbf{Limitations.} (i) All measurements use the two validation subjects
 of the deployed checkpoint, and calibration is studied on these two only.
@@ -609,7 +704,8 @@ between placements, \SelExecGainMin--\SelExecGainMax\x from gating) are far
 larger. (iii) The placements share the PyTorch release but differ in
 processor architecture, operating system, Python and SHAP version; the
 placement ratio reflects the whole platform, including multithreaded BLAS
-and the unpinned CPU governor of the Pi (Sec.~\ref{sec:res-place}).
+(Sec.~\ref{sec:res-place}). The Pi runs used a server build that did not
+log temperature or throttling state; the board was actively cooled.
 (iv) The gains of gating were measured on one segment with a
 \SelShapCRate\% explanation rate; they scale with the rate.
 (v) One worker per server; a cloud placement was measured earlier with a
@@ -636,8 +732,7 @@ available.
 % ======================================================================
 \begin{thebibliography}{99}
 \footnotesize
-% Entries marked VERIFY must be checked against the original before
-% submission (see docs/literature.md, Sec. 5).
+% almadhor, elrashidy, shats, taguta, paes: checked against the originals (12 Oct 2026).
 
 \bibitem{schmidt2018}
 P.~Schmidt, A.~Reiss, R.~Duerichen, C.~Marberger, and K.~Van~Laerhoven,
@@ -659,10 +754,10 @@ M.~Nauta \emph{et al.}, ``From anecdotal evidence to quantitative evaluation
 methods: A systematic review on evaluating explainable AI,'' \emph{ACM
 Comput.\ Surv.}, vol.~55, no.~13s, Art.~295, 2023.
 
-\bibitem{almadhor2025} % VERIFY
-A.~Almadhor \emph{et al.}, ``Explainable deep learning for multimodal
-physiological stress and emotion recognition,'' \emph{Front.\ Bioeng.\
-Biotechnol.}, 2025, doi:10.3389/fbioe.2025.1659002.
+\bibitem{almadhor2025}
+A.~Almadhor \emph{et al.}, ``A cross-domain framework for emotion and
+stress detection using WESAD, SCIENTISST-MOVE, and DREAMER datasets,''
+\emph{Front.\ Bioeng.\ Biotechnol.}, 2025, doi:10.3389/fbioe.2025.1659002.
 
 \bibitem{erzurumluoglu2025}
 \"O.~F.~Erzurumluo\u{g}lu, K.~\"Ozlem, A.~T.~Atalay, \"O.~Atalay, and
@@ -676,13 +771,17 @@ healthcare system for automatic diagnosis of heart diseases in integrated
 IoT and fog computing environments,'' \emph{Future Gener.\ Comput.\ Syst.},
 vol.~104, pp.~187--200, 2020.
 
-\bibitem{elrashidy2025} % VERIFY
-N.~El~Rashidy \emph{et al.}, ``An explainable fog-based emotion recognition
-framework,'' \emph{Front.\ Comput.\ Sci.}, vol.~7, 2025.
+\bibitem{elrashidy2025}
+N.~El~Rashidy, E.~Allogmani, E.~Hassan, K.~Alnowaiser, H.~Elmannai, and
+Z.~H.~Ali, ``Toward real-time emotion recognition in fog computing-based
+systems: Leveraging interpretable PCA\_CNN, YOLO with self-attention
+mechanism,'' \emph{Front.\ Comput.\ Sci.}, vol.~7, Art.~1714394, 2025.
 
-\bibitem{shats2025} % VERIFY author list
-M.~Franco de la Pe\~na \emph{et al.}, ``ShaTS: A Shapley-based method for
-time-series explainability,'' arXiv:2506.01450, 2025.
+\bibitem{shats2025}
+M.~Franco de la Pe\~na, \'A.~L.~Perales G\'omez, and
+L.~Fern\'andez Maim\'o, ``ShaTS: A Shapley-based explainability method for
+time series artificial intelligence models applied to anomaly detection in
+Industrial Internet of Things,'' arXiv:2506.01450, 2025.
 
 \bibitem{warnecke2020}
 A.~Warnecke, D.~Arp, C.~Wressnegger, and K.~Rieck, ``Evaluating explanation
@@ -694,9 +793,21 @@ N.~Jethani, M.~Sudarshan, I.~Covert, S.-I.~Lee, and R.~Ranganath,
 ``FastSHAP: Real-time Shapley value estimation,'' in \emph{Proc.\ ICLR},
 2022.
 
-\bibitem{taguta2026} % VERIFY title and authors
-T.~Taguta \emph{et al.}, ``Conditional SHAP for on-device cold-chain
-monitoring,'' arXiv:2609.14036, 2026.
+\bibitem{taguta2026}
+J.~Taguta, J.~F.~Isingizwe Nturambirwe, and C.~N.~Nyirenda, ``Real-world
+deployment and performance characterisation of fog-based deep learning for
+cold-chain temperature prediction over LoRaWAN,'' arXiv:2609.14036, 2026.
+
+\bibitem{gia2015}
+T.~N.~Gia, M.~Jiang, A.-M.~Rahmani, T.~Westerlund, P.~Liljeberg, and
+H.~Tenhunen, ``Fog computing in healthcare internet of things: A case
+study on ECG feature extraction,'' in \emph{Proc.\ IEEE Int.\ Conf.\
+Computer and Information Technology (CIT)}, 2015, pp.~356--363.
+
+\bibitem{ghose2025}
+D.~Ghose \emph{et al.}, ``Investigating lightweight and interpretable
+machine learning models for efficient and explainable stress detection,''
+\emph{Front.\ Digit.\ Health}, vol.~7, Art.~1523381, 2025.
 
 \bibitem{teerapittayanon2017}
 S.~Teerapittayanon, B.~McDanel, and H.~T.~Kung, ``BranchyNet: Fast
@@ -708,9 +819,10 @@ K.~Berestizshevsky and G.~Even, ``Dynamically sacrificing accuracy for
 reduced computation: Cascaded inference based on softmax confidence,'' in
 \emph{Proc.\ ICANN}, 2019, pp.~306--320.
 
-\bibitem{paes2024} % VERIFY venue (NeurIPS 2024?)
-L.~M.~Paes, D.~Wei, and F.~P.~Calmon, ``Selective explanations,''
-arXiv:2405.19562, 2024.
+\bibitem{paes2024}
+L.~M.~Paes, D.~Wei, and F.~P.~Calmon, ``Selective explanations,'' in
+\emph{Advances in Neural Information Processing Systems (NeurIPS)}, vol.~37,
+2024.
 
 \bibitem{artelt2023}
 A.~Artelt, R.~Visser, and B.~Hammer, ```I do not know! but why?' ---

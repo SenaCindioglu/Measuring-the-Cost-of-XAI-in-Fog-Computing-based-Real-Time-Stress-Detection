@@ -497,3 +497,23 @@ Dosyalar 12 Ekim'de kökten taşındı ve yeniden adlandırıldı:
 Pi / co-located açıklama süresi oranı (aynı torch): LIME-cheap **2.6×**,
 SHAP-cheap **5.8×**. "Pi yalnızca 2–3× yavaş" ifadesi yalnızca LIME için
 doğru; SHAP için değil.
+
+## 16_pi_perf — Pi, governor = performance (12 Ekim) — Tablo II'nin Pi satırları
+
+`15_pi_ondemand` ile aynı Pi ve yazılım; tek fark CPU governor'ı
+`performance`. Sunucu hâlâ eski sürüm (`server_build`, termal kayıt, BLAS
+sınırı yok). S11, 184 pencere, tek istemci, açık döngü.
+
+| Dosya | Açıklayıcı | exec medyan | xai medyan |
+|---|---|---|---|
+| `fog_pi_none_perf.json` | yok | 10.4 ms (ondemand'da 21.9) | — |
+| `fog_pi_lime_perf.json` | LIME 250 | 697 ms | 686 ms |
+| `fog_pi_shap_perf.json` | SHAP 50 | 1157 ms | 1146 ms |
+| `fog_pi_lime_full_perf.json` | LIME 500 | 1485 ms | 1474 ms |
+| `fog_pi_shap_full_perf.json` | SHAP 200 | *bekleniyor* | |
+
+**Frekans ölçekleme doğrulandı:** ondemand'da boştaki çıkarım 14.2 ms /
+meşgulde 7.3 ms; performance'ta 6.8 / 7.2 ms. XAI'siz execution 2.1× hızlanıyor,
+açıklama süresi en çok %8 değişiyor. Makalede seçici ve çok istemcili
+tablolar ondemand verisiyle, kendi ondemand "hep açıkla" koşularıyla
+karşılaştırılıyor; Tablo II performance verisi.

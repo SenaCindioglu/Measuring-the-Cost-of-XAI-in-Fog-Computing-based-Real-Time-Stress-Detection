@@ -39,12 +39,24 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 R = os.path.join(ROOT, 'results')
 OUT = os.path.join(ROOT, 'paper', 'icaiic', 'numbers.tex')
 HOP_MS = 5000.0
-PI_DIR = os.environ.get('WESAD_PAPER_PI_DIR', '15_pi_ondemand')
+PI_PERF = '16_pi_perf'        # governor = performance (tek istemci profili)
+PI_OD = '15_pi_ondemand'      # governor = ondemand (secici + cok istemci)
+PI_DIR = PI_OD
 REALTIME_BOUND_MS = 1000.0          # ShaTS: >1 s / pencere gercek zamanli degil
 
 COLOC = {'none': 'coloc_none', 'shap_cheap': 'coloc_shap_cheap',
          'lime_cheap': 'coloc_lime_cheap', 'lime': 'coloc_lime', 'shap': 'coloc_shap'}
-FOG = {'none': 'fog_pi_none', 'lime_cheap': 'fog_pi_lime', 'shap_cheap': 'fog_pi_shap'}
+FOG = {'none': 'fog_pi_none_perf', 'lime_cheap': 'fog_pi_lime_perf',
+       'shap_cheap': 'fog_pi_shap_perf', 'lime': 'fog_pi_lime_full_perf',
+       'shap': 'fog_pi_shap_full_perf'}          # eksik olan atlanir
+FOGOD = {'none': 'fog_pi_none', 'lime_cheap': 'fog_pi_lime', 'shap_cheap': 'fog_pi_shap'}
+# Bulut: yalnizca v2 protokoluyle (acik dongu, torch 2.14.1+cpu imaji)
+# yeniden olculurse girer. Dizin yoksa makale iki yerlesimle derlenir;
+# dizin varsa BES dosya da zorunludur ve metindeki bulut iddialari
+# denetlenir. v1 bulut kosulari (13_bulut) kapali donguyle alindi, girmez.
+CLOUD_DIR = '17_cloud_v2'
+CLOUD = {m: f'cloud_{m}' for m in ('none', 'shap_cheap', 'lime_cheap', 'lime', 'shap')}
+WORD = {1: 'one', 2: 'two', 3: 'three', 4: 'four'}
 SEL = {'lime_cheap': 'fog_pi_sel_lime', 'shap_cheap': 'fog_pi_sel_shap'}
 LOAD = {1: 'fog_pi_load1', 2: 'fog_pi_load2', 4: 'fog_pi_load4'}
 TAG = {'none': 'None', 'shap_cheap': 'ShapC', 'lime_cheap': 'LimeC',
@@ -129,9 +141,20 @@ def main():
 
     # ------------------------------------------------ tier hucreleri
     cells = {}
-    for tier, files, T in [('coloc', COLOC, 'Coloc'), ('fog', FOG, 'Fog')]:
-        sub = '16_coloc' if tier == 'coloc' else PI_DIR
+    has_cloud = os.path.isdir(os.path.join(R, CLOUD_DIR))
+    o.lines.append(r'\newif\ifcloud' + (r' \cloudtrue' if has_cloud else ''))
+    tiers = [('coloc', COLOC, 'Coloc', '16_coloc'),
+             ('fog', FOG, 'Fog', PI_PERF),
+             ('fogod', FOGOD, 'FogOD', PI_OD)]
+    if has_cloud:
+        tiers.append(('cloud', CLOUD, 'Cloud', CLOUD_DIR))
+    for tier, files, T, sub in tiers:
         for m, fn in files.items():
+            if not os.path.exists(os.path.join(R, sub, fn + '.json')):
+                if m in ('none', 'lime_cheap', 'shap_cheap') or tier == 'cloud':
+                    raise SystemExit(f"[EKSIK] {sub}/{fn}.json")
+                print(f"[i] henuz yok, atlandi: {sub}/{fn}.json")
+                continue
             d = load(sub, fn + '.json')
             check_kunye(d, fn, m, 0.0 if m == 'none' else 1.0)
             c = cells[(tier, m)] = cell(d)
@@ -154,6 +177,19 @@ def main():
             o.put(p + 'N', c['n'], 0)
             o.put(p + 'Kbps', c['kbps'], 1)
             o.put(p + 'Inf', c['inf_med'], 1)
+            st = d.get('server_stages') or {}
+            for sk, sn in [('resampling', 'Resamp'), ('preprocessing', 'Prep'),
+                           ('tensor_prep', 'Tensor'), ('postprocessing', 'Post')]:
+                if sk in st:
+                    o.put(p + sn, st[sk]['median_ms'], 2)
+            if m == 'none' and all(k in st for k in
+                                   ('resampling', 'preprocessing', 'tensor_prep',
+                                    'inference', 'postprocessing')):
+                tot = sum(st[k]['median_ms'] for k in
+                          ('resampling', 'preprocessing', 'tensor_prep',
+                           'inference', 'postprocessing'))
+                o.claim(f'{tier}: asama medyanlari toplami execution %15 icinde',
+                        abs(tot - c['exec_med']) / c['exec_med'] < 0.15)
             o.put(p + 'HopPct', 100 * c['exec_med'] / HOP_MS, 1)
             o.put(p + 'Cap', math.floor(HOP_MS / c['exec_mean']), 0)
             if c['xai_med'] is not None:
@@ -181,9 +217,19 @@ def main():
     o.put('FogShapVer', '0.53.0', src='paper/pi_env.md')
     o.claim('ayni PyTorch surumu', hc['torch'] == hf['torch'])
 
+    if has_cloud:
+        # Metin bulut sutununa gore yeniden okunana kadar bilerek sert:
+        # buluta ozgu iddialar yazilip buraya eklenmeden derleme gecmesin.
+        o.claim('BULUT verisi geldi: metin ve iddialar guncellenmeli '
+                '(bu iddia kasitli olarak FAIL)', False)
+
     # Turetilmis
     cn, fn_ = cells[('coloc', 'none')], cells[('fog', 'none')]
-    for m in ('lime_cheap', 'shap_cheap'):
+    fod = cells[('fogod', 'none')]
+    FM = [m for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap') if ('fog', m) in cells]
+    o.lines.append(r'\newif\ifpishapfull' + (r' \pishapfulltrue' if 'shap' in FM else ''))
+    o.put('FogNPoints', WORD[len(FM)])
+    for m in FM:
         r = cells[('fog', m)]['xai_med'] / cells[('coloc', m)]['xai_med']
         o.put(f'FogOverColocXai{TAG[m]}', r, 1)
         o.claim(f'Pi {m} aciklamasi co-located\'dan yavas', r > 1)
@@ -194,6 +240,13 @@ def main():
     o.claim('hostta SHAP-cheap tum aciklayicilarin en hizlisi',
             cells[('coloc', 'shap_cheap')]['xai_med'] == min(
                 cells[('coloc', m)]['xai_med'] for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')))
+    # "Maliyet ornek sayisiyla olcekleniyor" cumlesinin denetimi
+    o.claim('coloc: LIME / LIME-cheap aciklama orani ~2 (fark < 0.3)',
+            abs(cells[('coloc', 'lime')]['xai_med']
+                / cells[('coloc', 'lime_cheap')]['xai_med'] - 2) < 0.3)
+    o.claim('coloc: SHAP / SHAP-cheap aciklama orani ~4 (fark < 0.6)',
+            abs(cells[('coloc', 'shap')]['xai_med']
+                / cells[('coloc', 'shap_cheap')]['xai_med'] - 4) < 0.6)
     xc = [cells[('coloc', m)]['xai_med'] for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')]
     o.put('ColocXaiMin', min(xc), 0)
     o.put('ColocXaiMax', max(xc), 0)
@@ -201,11 +254,11 @@ def main():
           for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')]
     share = [cells[(t, m)]['xai_med'] / cells[(t, m)]['exec_med']
              for t, ms in [('coloc', ('shap_cheap', 'lime_cheap', 'lime', 'shap')),
-                           ('fog', ('lime_cheap', 'shap_cheap'))] for m in ms]
+                           ('fog', FM)] for m in ms]
     o.put('XaiShareMin', 100 * min(share), 0)
     o.put('XaiShareMax', 100 * max(share), 0)
     o.claim('aciklama execution suresinin >= %90\'i (tum XAI hucreleri)', min(share) >= 0.90)
-    xf = [cells[('fog', m)]['xai_med'] for m in ('lime_cheap', 'shap_cheap')]
+    xf = [cells[('fog', m)]['xai_med'] for m in FM]
     o.put('FogXaiMin', min(xf), 0)
     o.put('FogXaiMax', max(xf), 0)
     # Cevap - execution: pencere BAZINDA farkin medyani (medyan farki degil).
@@ -213,31 +266,44 @@ def main():
     def resid(sub, fn):
         r = load(sub, fn + '.json')['raw']
         return float(np.median(np.array(r['response_ms']) - np.array(r['execution_ms'])))
-    o.put('FogLimeCResidual', resid(PI_DIR, FOG['lime_cheap']), 1)
-    o.put('FogNoneResidual', resid(PI_DIR, FOG['none']), 1)
-    o.put('FogShapCResidual', resid(PI_DIR, FOG['shap_cheap']), 1)
+    o.put('FogLimeCResidual', resid(PI_PERF, FOG['lime_cheap']), 1)
+    o.put('FogNoneResidual', resid(PI_PERF, FOG['none']), 1)
+    o.put('FogShapCResidual', resid(PI_PERF, FOG['shap_cheap']), 1)
     # Pi'de LIME'in ortalama kullandigi cekirdek: CPU% / (100 * mesgul oran)
     fl = cells[('fog', 'lime_cheap')]
     o.put('FogLimeCCores', fl['cpu'] / (100 * fl['exec_mean'] / HOP_MS), 1)
     o.put('FogLimeCBusy', 100 * fl['exec_mean'] / HOP_MS, 1)
     # Gonderim gecikmesi (acik dongu sadakati), tek istemcili Pi kosulari
-    lags = [load(PI_DIR, fn + '.json')['metrics']['send_lag']
-            for fn in list(FOG.values()) + list(SEL.values())]
+    lags = [load(PI_PERF, FOG[m] + '.json')['metrics']['send_lag'] for m in ['none'] + FM]
+    lags += [load(PI_OD, fn + '.json')['metrics']['send_lag'] for fn in SEL.values()]
     o.put('PiLagPNFMax', max(l['p95_ms'] for l in lags), 0)
     o.put('PiLagMax', max(l['max_ms'] for l in lags), 0)
     o.put('ColocRatioMin', min(rc), 0)
     o.put('ColocRatioMax', max(rc), 0)
-    rf = [cells[('fog', m)]['xai_med'] / cells[('fog', m)]['pipe']
-          for m in ('lime_cheap', 'shap_cheap')]
+    rf = [cells[('fog', m)]['xai_med'] / cells[('fog', m)]['pipe'] for m in FM]
     o.put('FogRatioMin', min(rf), 0)
     o.put('FogRatioMax', max(rf), 0)
-    # Pi'de frekans olcekleme: ayni asamalar CPU bostayken yavas
-    inf_idle = fn_['inf_med']
-    inf_busy = np.median([cells[('fog', m)]['inf_med'] for m in ('lime_cheap', 'shap_cheap')])
+    # Pi'de frekans olcekleme: ondemand'da ayni asamalar CPU bostayken yavas;
+    # performance governor'da fark kayboluyor.
+    inf_idle = fod['inf_med']
+    inf_busy_od = np.median([cells[('fogod', m)]['inf_med'] for m in ('lime_cheap', 'shap_cheap')])
+    inf_perf = fn_['inf_med']
+    inf_busy_perf = np.median([cells[('fog', m)]['inf_med'] for m in ('lime_cheap', 'shap_cheap')])
     o.put('FogInfIdle', inf_idle, 1)
-    o.put('FogInfBusy', inf_busy, 1)
-    o.put('FogDvfs', inf_idle / inf_busy, 1)
-    o.claim('Pi: bostaki cikarim mesguldekinden >=1.5x yavas (DVFS)', inf_idle / inf_busy >= 1.5)
+    o.put('FogInfBusy', inf_busy_od, 1)
+    o.put('FogDvfs', inf_idle / inf_busy_od, 1)
+    o.put('FogInfPerf', inf_perf, 1)
+    o.put('FogInfBusyPerf', inf_busy_perf, 1)
+    o.put('FogGovGain', fod['exec_med'] / fn_['exec_med'], 1)
+    o.claim('ondemand: bostaki cikarim mesguldekinden >=1.5x yavas', inf_idle / inf_busy_od >= 1.5)
+    o.claim('performance: bostaki ve mesguldeki cikarim %15 icinde',
+            abs(inf_perf - inf_busy_perf) / inf_busy_perf < 0.15)
+    o.claim("performance governor XAI'siz execution'i >=1.5x hizlandirdi",
+            fod['exec_med'] / fn_['exec_med'] >= 1.5)
+    for m in ('lime_cheap', 'shap_cheap'):
+        g = cells[('fogod', m)]['xai_med'] / cells[('fog', m)]['xai_med']
+        o.put(f'FogGovXai{TAG[m]}', 100 * (g - 1), 0)
+        o.claim(f"governor {m} aciklama suresini %15'ten az degistirdi", abs(g - 1) < 0.15)
     ci = cn['inf_med']
     o.claim('co-located: XAI\'siz ve LIME kosusunda cikarim farki <%25',
             abs(cells[('coloc', 'lime_cheap')]['inf_med'] - ci) / ci < 0.25)
@@ -245,29 +311,35 @@ def main():
     # Gercek zamanli sinir (ShaTS, 1 s)
     o.claim('Pi SHAP-cheap response medyani 1 s ustu',
             cells[('fog', 'shap_cheap')]['resp_med'] > REALTIME_BOUND_MS)
-    shap_min = min(load(PI_DIR, FOG['shap_cheap'] + '.json')['raw']['response_ms'])
+    shap_min = min(load(PI_PERF, FOG['shap_cheap'] + '.json')['raw']['response_ms'])
     o.put('FogShapCRespMin', shap_min, 0)
     o.claim('Pi SHAP-cheap: TUM yanitlar 1 s ustu', shap_min > REALTIME_BOUND_MS)
     o.claim('Pi LIME-cheap response p95 1 s alti',
             cells[('fog', 'lime_cheap')]['resp_p95'] < REALTIME_BOUND_MS)
+    if 'lime' in FM:
+        o.claim('Pi tam LIME medyani 1 s ustu', cells[('fog', 'lime')]['resp_med'] > REALTIME_BOUND_MS)
+    if 'shap' in FM:
+        o.claim('Pi tam SHAP medyani 1 s ustu', cells[('fog', 'shap')]['resp_med'] > REALTIME_BOUND_MS)
     o.claim('co-located tum aciklayicilarda p95 1 s alti',
             all(cells[('coloc', m)]['resp_p95'] < REALTIME_BOUND_MS
                 for m in ('shap_cheap', 'lime_cheap', 'lime', 'shap')))
-    lat = [c['lat_med'] for c in cells.values()]
+    lat = [c['lat_med'] for k, c in cells.items() if k[0] != 'fogod']
     o.put('LatMaxAll', max(lat), 1)
     o.claim('tek yon gecikme medyani tum tek-istemci kosularinda < 5 ms', max(lat) < 5)
-    que = [c['que_med'] for c in cells.values()]
+    que = [c['que_med'] for k, c in cells.items() if k[0] != 'fogod']
     o.put('QueMaxAll', max(que), 1)
     o.claim('kuyruk medyani tek istemcide <= 0.1 ms', max(que) <= 0.105)
-    kb = [c['kbps'] for c in cells.values()]
+    kb = [c['kbps'] for k, c in cells.items() if k[0] != 'fogod']
     o.put('KbpsAll', np.median(kb), 0)
     o.claim('bant genisligi tum kosularda ayni (fark < %1)',
             (max(kb) - min(kb)) / min(kb) < 0.01)
     grow = [cells[(t, m)]['rss'] / cells[(t, 'none')]['rss']
             for t, ms in [('coloc', ('shap_cheap', 'lime_cheap', 'lime', 'shap')),
-                          ('fog', ('lime_cheap', 'shap_cheap'))] for m in ms]
+                          ('fog', FM)] for m in ms]
     o.put('RssGrowMin', min(grow), 1)
     o.put('RssGrowMax', max(grow), 1)
+    o.put('FogRssPct', 100 * max(cells[('fog', m)]['rss'] for m in FM)
+          / cells[('fog', 'none')]['hw']['total_ram_mb'], 0)
     o.claim('aciklayici yuklu iken bellek >= 1.5x', min(grow) >= 1.5)
     o.claim('XAI\'siz pipeline hop\'un %1\'inden az',
             max(cn['exec_med'], fn_['exec_med']) < 0.01 * HOP_MS)
@@ -277,7 +349,7 @@ def main():
     for m, fn in SEL.items():
         d = load(PI_DIR, fn + '.json')
         check_kunye(d, fn, m, 0.80)
-        s, a = cell(d), cells[('fog', m)]
+        s, a = cell(d), cells[('fogod', m)]
         x = d['xai']
         p = 'Sel' + TAG[m]
         src = f'{PI_DIR}/{fn}.json'
@@ -302,7 +374,7 @@ def main():
         o.put(p + 'PerExplDiff', 100 * dpe, 1)
         o.claim(f'{m}: aciklama basi maliyet secici ve hep kosularinda %2 icinde', dpe < 0.02)
         # Karisim modeli: E[exec] = E[exec | aciklama yok] + r * E[xai]
-        pred = fn_['exec_mean'] + x['explain_rate'] * x['mean_ms_per_explanation']
+        pred = fod['exec_mean'] + x['explain_rate'] * x['mean_ms_per_explanation']
         err = abs(pred - s['exec_mean']) / s['exec_mean']
         o.put(p + 'ProjExec', pred, 1)
         o.put(p + 'ProjErr', 100 * err, 1)
@@ -330,10 +402,10 @@ def main():
     diffs, errs, gains, capg = [], [], [], []
     for m in SEL:
         d = load(PI_DIR, SEL[m] + '.json')
-        a = cells[('fog', m)]
+        a = cells[('fogod', m)]
         x = d['xai']
         diffs.append(abs(x['mean_ms_per_explanation'] - a['xai_per_expl']) / a['xai_per_expl'])
-        pred = fn_['exec_mean'] + x['explain_rate'] * x['mean_ms_per_explanation']
+        pred = fod['exec_mean'] + x['explain_rate'] * x['mean_ms_per_explanation']
         errs.append(abs(pred - d['metrics']['execution']['mean_ms'])
                     / d['metrics']['execution']['mean_ms'])
         gains.append(a['exec_mean'] / d['metrics']['execution']['mean_ms'])
@@ -457,8 +529,9 @@ def main():
 
     # Saat belirsizligi: kullanilan tum kosularin en buyugu
     unc = []
-    for sub, fns in [('16_coloc', COLOC.values()), (PI_DIR, list(FOG.values())
-                      + list(SEL.values()) + list(LOAD.values()))]:
+    for sub, fns in [('16_coloc', COLOC.values()),
+                     (PI_PERF, [FOG[m] for m in ['none'] + FM]),
+                     (PI_OD, list(FOGOD.values()) + list(SEL.values()) + list(LOAD.values()))]:
         for fn in fns:
             unc.append(load(sub, fn + '.json')['clock_sync']['uncertainty_ms'])
     o.put('ClockUncMax', max(unc), 1)

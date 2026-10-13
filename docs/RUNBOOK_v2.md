@@ -136,3 +136,26 @@ ile taban (bunlar §4'teki fog hücrelerinden de alınabilir).
 - `pooled` (çok istemci) — tüm istemcilerin pencereleri tek dağılım; eski
   `metrics` istemci özetlerinin özeti (en kötü istemcinin p95'i).
 - `raw` — pencere bazlı ham değerler (CDF, Wilcoxon için).
+
+## Bulut (v2) — makaleye girmesi için yeniden koşulmalı
+
+v1 bulut koşuları (13_bulut) kapalı döngü ve torch 2.14.0+cu130 ile
+alındı; makaleye GİRMEZ. Tablo II'nin bulut bloğu `results/17_cloud_v2/`
+dolunca kendiliğinden açılır (`\ifcloud`); beş dosya da zorunlu:
+`cloud_{none,shap_cheap,lime_cheap,lime,shap}.json`.
+
+```bash
+# VPS'te: depo guncel commit'te olmali, imaj yeniden kurulmali
+docker compose build          # torch==2.14.1+cpu dogrulamasi imajin icinde
+# her durum icin (m = none|shap_cheap|lime_cheap|lime|shap):
+WESAD_XAI_METHOD=shap_cheap WESAD_XAI_THRESHOLD=1.0 docker compose up -d --force-recreate
+```
+```powershell
+# laptopta (sure ~17 dk/durum; none icin THRESHOLD=0)
+python run_fog_experiment.py --server-host <VPS_IP> --subject S11 --realtime --tag cloud_shap_cheap
+# cikti results/fog_cloud_shap_cheap.json -> results/17_cloud_v2/cloud_shap_cheap.json adiyla tasi
+```
+Dosyalar yerine konunca `tools/paper_numbers.py` kasıtlı bir FAIL üretir
+("BULUT verisi geldi: metin guncellenmeli"): bulut sayilariyla celisen
+cumleler (orn. "ag en fazla 4.2 ms") elden gecirilmeden PDF uretilmez.
+O asamada Claude'a haber ver.
