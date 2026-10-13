@@ -56,11 +56,12 @@ def fig_cost():
     fig, ax = plt.subplots(figsize=(3.4, 2.3 if has_cloud else 2.0))
     y = range(len(rows))
     h = 0.27 if has_cloud else 0.38
+    # y ekseni ters: negatif ofset ustte; cubuklar etiket etrafinda ortali
     for i, (lab, c, g, k) in enumerate(rows):
-        bars = [(c, h, '#8dafd4', 'laptop (co-located)'),
-                (g, 0 if has_cloud else -h, '#c0504d', 'fog (Raspberry Pi 4)')]
+        bars = [(c, -h if has_cloud else -h / 2, '#8dafd4', 'laptop (co-located)'),
+                (g, 0 if has_cloud else h / 2, '#c0504d', 'fog (Raspberry Pi 4)')]
         if has_cloud:
-            bars.append((k, -h, '#9bbb59', 'cloud (VPS)'))
+            bars.append((k, h, '#9bbb59', 'cloud (VPS)'))
         for val, off, color, lab_ in bars:
             if not val:
                 continue
