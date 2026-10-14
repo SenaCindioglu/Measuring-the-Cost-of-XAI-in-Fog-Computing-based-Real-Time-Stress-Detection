@@ -394,15 +394,13 @@ how long an individual response takes.
 % ======================================================================
 
 \begin{table*}[t]
-\caption{Placement comparison, one client, 184 measured windows per
-configuration (ms unless stated; Pi with the performance CPU governor).
-latency, exec.\ and resp.\ p50 are medians over windows; xai is the median
-explanation time within execution; CPU is the mean utilisation of the
-server process (100\% = one core); RSS is its peak resident memory. In
-every configuration the median queuing delay is at most \QueMaxAll\ms and
-bandwidth is about \KbpsAll\,kbps (columns omitted).
-$^\dagger$Cloud: half of response minus execution (clock offset too
-uncertain over the Internet).}
+\caption{Placement comparison, one client, 184 measured windows each (ms;
+Pi with the performance governor). latency, exec., xai (explanation time
+within execution) and resp.\ p50 are medians over windows; CPU: mean
+utilisation of the server process (100\% = one core); RSS: peak memory.
+Median queuing delay $\le$\,\QueMaxAll\ms and bandwidth
+$\approx$\,\KbpsAll\,kbps everywhere. $^\dagger$Cloud: half of response
+minus execution (clock offset too uncertain).}
 \label{tab:profile}
 \centering\footnotesize
 \setlength{\tabcolsep}{4.5pt}
@@ -673,11 +671,10 @@ by tens of milliseconds at most---the same order as the differences
 between the edge, fog and cloud placements of~\cite{erzurumluoglu2025}
 (mean response times 22.5, 43.3 and 73.3\ms). With explanation, two other
 parameters dominate: the compute capability of the node, which changes the
-cost of an explanation by up to \FogOverColocXaiShapC\x, and the triggering
+cost of an explanation by up to \FogOverColocXaiShap\x, and the triggering
 policy, which changes the mean cost by
 \SelExecGainMin--\SelExecGainMax\x on our segment. On a Raspberry~Pi~4,
-explaining every window meets the 1\,s criterion for a single user with
-LIME-cheap but not with SHAP-cheap; the throughput capacity of one worker
+the throughput capacity of one worker
 is \FogODShapCCap--\FogODLimeCCap users when every window is explained and
 \SelShapCCap--\SelLimeCCap with gating, while individual explained
 responses keep their single-user latency only when they do not collide.
@@ -693,7 +690,7 @@ of the deployed checkpoint, and calibration is studied on these two only.
 \LoadOneN--\SelShapCN windows, and between-run variance is not reported.
 In an earlier offline benchmark (\RepeatRuns runs, laptop, no network or
 explanation) run medians varied by \RepeatSpread\% and 95th percentiles by
-\RepeatSpreadPNF\%; the effects we draw conclusions from (\FogOverColocXaiLimeC--\FogOverColocXaiShapC\x
+\RepeatSpreadPNF\%; the effects we draw conclusions from (\FogOverColocXaiLimeC--\FogOverColocXaiShap\x
 between placements, \SelExecGainMin--\SelExecGainMax\x from gating) are far
 larger. (iii) The placements share the PyTorch release but differ in
 processor architecture, operating system, Python and SHAP version; the

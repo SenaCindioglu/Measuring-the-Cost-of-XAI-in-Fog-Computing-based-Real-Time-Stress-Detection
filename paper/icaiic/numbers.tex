@@ -19,6 +19,7 @@
 %   [ok] Pi shap_cheap aciklamasi co-located'dan yavas
 %   [ok] Pi lime_cheap aciklamasi co-located'dan yavas
 %   [ok] Pi lime aciklamasi co-located'dan yavas
+%   [ok] Pi shap aciklamasi co-located'dan yavas
 %   [ok] siralama tersine: hostta SHAP-cheap LIME-cheap'ten hizli, Pi'de yavas
 %   [ok] hostta SHAP-cheap tum aciklayicilarin en hizlisi
 %   [ok] coloc: LIME / LIME-cheap aciklama orani ~2 (fark < 0.3)
@@ -34,6 +35,7 @@
 %   [ok] Pi SHAP-cheap: TUM yanitlar 1 s ustu
 %   [ok] Pi LIME-cheap response p95 1 s alti
 %   [ok] Pi tam LIME medyani 1 s ustu
+%   [ok] Pi tam SHAP medyani 1 s ustu
 %   [ok] co-located tum aciklayicilarda p95 1 s alti
 %   [ok] tek yon gecikme medyani tum LAN tek-istemci kosularinda < 5 ms
 %   [ok] kuyruk medyani tek istemcide <= 0.25 ms
@@ -297,6 +299,33 @@
 \newcommand{\FogLimeXaiPNF}{1{,}557\xspace}
 \newcommand{\FogLimePipe}{10.8\xspace}
 \newcommand{\FogLimeXaiOverPipe}{137\xspace}
+\newcommand{\FogShapRespMed}{4{,}549.4\xspace}  % 16_pi_perf/fog_pi_shap_full_perf.json
+\newcommand{\FogShapRespPNF}{4{,}573.4\xspace}
+\newcommand{\FogShapRespPNN}{4{,}587.8\xspace}
+\newcommand{\FogShapRespMean}{4{,}551.5\xspace}
+\newcommand{\FogShapExecMed}{4{,}544.2\xspace}
+\newcommand{\FogShapExecMean}{4{,}545.8\xspace}
+\newcommand{\FogShapAgeMed}{4{,}557.5\xspace}
+\newcommand{\FogShapAgePNF}{4{,}585.9\xspace}
+\newcommand{\FogShapLatMed}{2.70\xspace}
+\newcommand{\FogShapQueMed}{0.06\xspace}
+\newcommand{\FogShapJit}{18.8\xspace}
+\newcommand{\FogShapNet}{2.6\xspace}
+\newcommand{\FogShapRSS}{494\xspace}
+\newcommand{\FogShapCPU}{101.8\xspace}
+\newcommand{\FogShapN}{184\xspace}
+\newcommand{\FogShapKbps}{186.4\xspace}
+\newcommand{\FogShapInf}{7.0\xspace}
+\newcommand{\FogShapResamp}{2.13\xspace}
+\newcommand{\FogShapPrep}{0.49\xspace}
+\newcommand{\FogShapTensor}{0.25\xspace}
+\newcommand{\FogShapPost}{0.14\xspace}
+\newcommand{\FogShapHopPct}{90.9\xspace}
+\newcommand{\FogShapCap}{1\xspace}
+\newcommand{\FogShapXaiMed}{4{,}534\xspace}
+\newcommand{\FogShapXaiPNF}{4{,}557\xspace}
+\newcommand{\FogShapPipe}{10.5\xspace}
+\newcommand{\FogShapXaiOverPipe}{431\xspace}
 \newcommand{\FogODNoneRespMed}{27.8\xspace}  % 15_pi_ondemand/fog_pi_none.json
 \newcommand{\FogODNoneRespPNF}{31.1\xspace}
 \newcommand{\FogODNoneRespPNN}{41.4\xspace}
@@ -517,18 +546,19 @@
 \newcommand{\CloudOverColocXaiLimeC}{1.2\xspace}
 \newcommand{\FogOverCloudXaiShapC}{4.3\xspace}
 \newcommand{\CloudOverColocXaiShapC}{1.3\xspace}
-\newif\ifpishapfull
-\newcommand{\FogNPoints}{three\xspace}
+\newif\ifpishapfull \pishapfulltrue
+\newcommand{\FogNPoints}{four\xspace}
 \newcommand{\FogOverColocXaiShapC}{5.6\xspace}
 \newcommand{\FogOverColocXaiLimeC}{2.4\xspace}
 \newcommand{\FogOverColocXaiLime}{2.7\xspace}
+\newcommand{\FogOverColocXaiShap}{5.8\xspace}
 \newcommand{\FogOverColocNoneExec}{1.8\xspace}
 \newcommand{\ColocXaiMin}{203\xspace}
 \newcommand{\ColocXaiMax}{784\xspace}
 \newcommand{\XaiShareMin}{95\xspace}
-\newcommand{\XaiShareMax}{99\xspace}
+\newcommand{\XaiShareMax}{100\xspace}
 \newcommand{\FogXaiMin}{686\xspace}
-\newcommand{\FogXaiMax}{1{,}474\xspace}
+\newcommand{\FogXaiMax}{4{,}534\xspace}
 \newcommand{\FogLimeCResidual}{33.5\xspace}
 \newcommand{\FogNoneResidual}{4.8\xspace}
 \newcommand{\FogShapCResidual}{4.1\xspace}
@@ -539,7 +569,7 @@
 \newcommand{\ColocRatioMin}{20\xspace}
 \newcommand{\ColocRatioMax}{110\xspace}
 \newcommand{\FogRatioMin}{64\xspace}
-\newcommand{\FogRatioMax}{137\xspace}
+\newcommand{\FogRatioMax}{431\xspace}
 \newcommand{\FogInfIdle}{14.2\xspace}
 \newcommand{\FogInfBusy}{7.3\xspace}
 \newcommand{\FogDvfs}{1.9\xspace}
