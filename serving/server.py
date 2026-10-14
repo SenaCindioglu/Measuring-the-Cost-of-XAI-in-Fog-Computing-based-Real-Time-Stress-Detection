@@ -29,10 +29,12 @@ Calistirma:
 import argparse
 import asyncio
 import json
+import multiprocessing as mp
 import os
 import platform
+import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 import numpy as np
 import torch
@@ -430,6 +432,129 @@ async def worker(state):
             queue.task_done()
 
 
+# ---------------------------------------------------------------------------
+# --processes N > 1: ayni dugumde N hesap sureci (IISEC). N = 1 yukaridaki
+# tek-worker yolunu AYNEN kullanir; ICAIIC olcumleri o yoldan alindi.
+# ---------------------------------------------------------------------------
+
+def prepare_packet(sess, body, cfg):
+    """Oturum durumunu degistiren hafif kisim: tampon + normalizasyon.
+
+    Tek iplikli 'prep' executor'unda kosar; gorevler kuyruktan alindigi
+    sirayla (arada await olmadan) gonderildigi icin her oturumun paketleri
+    gonderim sirasiyla islenir ve RunningNormalizer bozulmaz.
+    """
+    msg_id, _, chunks = P.unpack_data(body, NATIVE_STREAMS, sess.per_tick)
+    ready = sess.buffer.push(chunks, sess.tick_s)
+    if not ready:
+        return msg_id, None, None
+    stages = {}
+    t0 = time.perf_counter()
+    raw_window = sess.buffer.get_window()
+    stages['resampling'] = (time.perf_counter() - t0) * 1000.0
+    if raw_window is None:
+        return msg_id, None, stages
+    t0 = time.perf_counter()
+    if sess.runner is not None:
+        new_part = (raw_window if sess.n_windows == 0
+                    else raw_window[-cfg.HOP_SIZE:])
+        sess.runner.update(new_part)
+        m, sd = sess.runner.mean, sess.runner.std
+    else:
+        m, sd = sess.fixed_mean, sess.fixed_std
+    norm_window = apply_normalization(raw_window, m, sd)
+    stages['preprocessing'] = (time.perf_counter() - t0) * 1000.0
+    sess.n_windows += 1
+    return msg_id, np.ascontiguousarray(norm_window, dtype=np.float32), stages
+
+
+async def worker_mp(state):
+    """N esdeger tuketiciden biri. Kuyruktan alir, hafif kismi 'prep'
+    ipliginde, agir kismi (cikarim + aciklama) surec havuzunda calistirir.
+    Ayni anda en fazla N paket islenir; fazlasi kuyrukta bekler ve bu
+    bekleme queuing delay olarak olculur (tek-worker tanimiyla ayni)."""
+    from serving import mp_worker
+    cfg, queue = state['cfg'], state['queue']
+    xai_threshold = state.get('xai_threshold', 0.0)
+    prep, pool = state['executor'], state['pool']
+    loop = asyncio.get_running_loop()
+
+    while True:
+        sess, body, t_recv = await queue.get()
+        try:
+            t_start = time.perf_counter_ns()
+            msg_id, norm_window, stages = await loop.run_in_executor(
+                prep, prepare_packet, sess, body, cfg)
+            predicted = explained = False
+            pred = conf = None
+            if norm_window is not None:
+                pred, conf, st2, explained, pid = await loop.run_in_executor(
+                    pool, mp_worker.child_compute, norm_window, xai_threshold)
+                stages.update(st2)
+                predicted = True
+                if explained:
+                    sess.n_explained += 1
+                state['pid_windows'][pid] = state['pid_windows'].get(pid, 0) + 1
+            t_end = time.perf_counter_ns()
+            sess.writer.write(P.pack_reply(msg_id, t_recv, t_start, t_end,
+                                           predicted=predicted, pred=pred,
+                                           confidence=conf, true_label=None,
+                                           stages=stages, explained=explained))
+            await sess.writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            pass
+        finally:
+            queue.task_done()
+
+
+class _TreeSampler(threading.Thread):
+    """_ResourceSampler gibi, ama ana surec + TUM alt surecler toplanir.
+    Aksi halde hesap alt sureclerde oldugu icin CPU ~0 okunurdu.
+    cpu_percent her surec nesnesinin kendi onceki cagrisina gore olcer;
+    nesneler pid ile onbellekte tutulur."""
+
+    def __init__(self, proc, interval=0.25):
+        super().__init__(daemon=True)
+        self.proc = proc
+        self.interval = interval
+        self.cpu, self.rss = [], []
+        self._procs = {}
+        self._stop_evt = threading.Event()
+
+    def _members(self):
+        try:
+            kids = self.proc.children(recursive=True)
+        except Exception:
+            kids = []
+        live = {}
+        for p in [self.proc] + kids:
+            live[p.pid] = self._procs.get(p.pid) or p
+            if p.pid not in self._procs:
+                try:
+                    live[p.pid].cpu_percent(interval=None)
+                except Exception:
+                    pass
+        self._procs = live
+        return list(live.values())
+
+    def run(self):
+        self._members()
+        while not self._stop_evt.wait(self.interval):
+            cpu = rss = 0.0
+            for p in self._members():
+                try:
+                    cpu += p.cpu_percent(interval=None)
+                    rss += p.memory_info().rss / (1024 ** 2)
+                except Exception:
+                    pass
+            self.cpu.append(cpu)
+            self.rss.append(rss)
+
+    def stop(self):
+        self._stop_evt.set()
+        self.join(timeout=1.0)
+
+
 async def handle_client(reader, writer, state):
     cfg, model = state['cfg'], state['model']
     peer = writer.get_extra_info('peername')
@@ -449,6 +574,7 @@ async def handle_client(reader, writer, state):
     sampler = state.get('sampler')
     sess.sample_start = len(sampler.cpu) if sampler else 0
     sess.thermal_start = thermal_snapshot()
+    sess.pid_start = dict(state.get('pid_windows', {}))
     state['sessions'] += 1
     state['sessions_peak'] = max(state.get('sessions_peak', 0), state['sessions'])
     print(f"[+] istemci baglandi: {sess.client_id} (subject={sess.subject}, "
@@ -481,6 +607,8 @@ async def handle_client(reader, writer, state):
                             xai_info['config'] = explainer.config()
                         except Exception:
                             pass
+                    elif state.get('xai_config') is not None:
+                        xai_info['config'] = state['xai_config']
                     writer.write(P.pack_stats({
                         'hardware': state['hardware'],
                         'resources': resource_summary(state.get('sampler'),
@@ -491,7 +619,15 @@ async def handle_client(reader, writer, state):
                         # v2.3: BLAS siniri bayraga baglandi (--limit-blas,
                         # varsayilan kapali); fiili durum
                         # hardware.blas_threads_limited alaninda.
-                        'server_build': 'v2.3-executor-blasflag',
+                        # v2.4: --processes eklendi; processes == 1 yolu
+                        # v2.3 ile ayni kod.
+                        'server_build': 'v2.4-multiprocess',
+                        'processes': state.get('processes', 1),
+                        # Oturum suresince her alt surecin isledigi pencere
+                        # (tum istemciler toplam): yuk dagiliminin kaniti.
+                        'windows_per_process': {
+                            str(k): v - sess.pid_start.get(k, 0)
+                            for k, v in state.get('pid_windows', {}).items()},
                         'thermal': {'start': sess.thermal_start,
                                     'end': thermal_snapshot()},
                         'client_loop': sess.loop,
@@ -517,7 +653,7 @@ async def handle_client(reader, writer, state):
 
             if state['log_every'] and sess.n_packets % state['log_every'] == 0:
                 extra = (f", {sess.n_explained} aciklama"
-                         if state.get('explainer') is not None else "")
+                         if state.get('xai_on') else "")
                 print(f"    {sess.client_id}: {sess.n_packets} paket, "
                       f"{sess.n_windows} tahmin{extra}")
 
@@ -566,30 +702,65 @@ async def main_async(args):
     # XAI: aciklayiciyi ISTEMCI BAGLANMADAN kur ve isit. Kaynak ornekleyici
     # de bundan sonra baslatilir, yoksa isinmanin CPU/RAM tepesi kosunun
     # kaynak ozetine karisirdi.
-    explainer = build_explainer(args.xai_method, model, device='cpu')
+    n_proc = max(1, args.processes)
+    explainer = pool = xai_config = None
     warmup_ms = None
-    if explainer is not None:
-        print(f"[i] XAI hazirlaniyor ({args.xai_method}), ilk cagri yavastir...")
-        warmup_ms = warmup_explainer(explainer, cfg)
-        print(f"[i] XAI hazir. Isinma cagrisi {warmup_ms:.0f} ms surdu "
-              f"(olcume DAHIL DEGIL).")
+    if n_proc == 1:
+        explainer = build_explainer(args.xai_method, model, device='cpu')
+        if explainer is not None:
+            print(f"[i] XAI hazirlaniyor ({args.xai_method}), ilk cagri yavastir...")
+            warmup_ms = warmup_explainer(explainer, cfg)
+            print(f"[i] XAI hazir. Isinma cagrisi {warmup_ms:.0f} ms surdu "
+                  f"(olcume DAHIL DEGIL).")
+    else:
+        from serving import mp_worker
+        ctx = mp.get_context('spawn')
+        barrier = ctx.Barrier(n_proc)
+        pool = ProcessPoolExecutor(
+            max_workers=n_proc, mp_context=ctx, initializer=mp_worker.child_init,
+            initargs=(args.model, args.xai_method, args.threads,
+                      getattr(args, 'limit_blas', False), barrier))
+        print(f"[i] {n_proc} hesap sureci aciliyor ve isitiliyor "
+              f"({args.xai_method}); bu bir-iki dakika surebilir...")
+        loop = asyncio.get_running_loop()
+        ready = await asyncio.gather(*[loop.run_in_executor(pool, mp_worker.child_ready)
+                                       for _ in range(n_proc)])
+        pids = sorted({r['pid'] for r in ready})
+        if len(pids) != n_proc:
+            raise SystemExit(f"[!] {n_proc} surec bekleniyordu, {len(pids)} acildi")
+        warmups = [r['warmup_ms'] for r in ready if r['warmup_ms'] is not None]
+        warmup_ms = max(warmups) if warmups else None
+        xai_config = ready[0]['xai_config']
+        blas_limited = all(r['blas_limited'] for r in ready) if ready else blas_limited
+        print(f"[i] Surecler hazir: pid {pids}"
+              + (f", en uzun isinma {warmup_ms:.0f} ms (olcume DAHIL DEGIL)"
+                 if warmup_ms is not None else ""))
 
     hw = hardware_info()
     hw['blas_threads_limited'] = blas_limited
+    hw['processes'] = n_proc
     sampler = None
     if _HAS_PSUTIL:
-        sampler = _ResourceSampler(psutil.Process(os.getpid()), 0.25)
+        sampler_cls = _ResourceSampler if n_proc == 1 else _TreeSampler
+        sampler = sampler_cls(psutil.Process(os.getpid()), 0.25)
         sampler.start()
 
     state = {'cfg': cfg, 'model': model, 'mean': mean, 'std': std,
              'explainer': explainer, 'xai_threshold': args.xai_threshold,
              'xai_method': args.xai_method, 'xai_warmup_ms': warmup_ms,
+             'xai_on': canonical_method(args.xai_method) != 'none',
+             'xai_config': xai_config, 'processes': n_proc, 'pool': pool,
+             'pid_windows': {},
              'sessions': 0, 'sessions_peak': 0, 'log_every': args.log_every,
              'queue': asyncio.Queue(), 'hardware': hw, 'sampler': sampler,
              'executor': ThreadPoolExecutor(max_workers=1,
                                             thread_name_prefix='worker')}
 
-    asyncio.create_task(worker(state))
+    if n_proc == 1:
+        asyncio.create_task(worker(state))
+    else:
+        for _ in range(n_proc):
+            asyncio.create_task(worker_mp(state))
 
     server = await asyncio.start_server(
         lambda r, w: handle_client(r, w, state), args.host, args.port)
@@ -612,7 +783,9 @@ async def main_async(args):
               f"isinma {warmup_ms:.0f} ms")
     else:
         print(f"XAI          : kapali (--xai-method none)")
-    print(f"Mimari       : acik istek kuyrugu + tek worker")
+    print(f"Mimari       : acik istek kuyrugu + "
+          + ("tek worker" if n_proc == 1 else
+             f"{n_proc} hesap sureci (BLAS {'sinirli' if blas_limited else 'serbest'})"))
     th = thermal_snapshot()
     if any(v is not None for v in th.values()):
         print(f"Termal       : {th.get('cpu_temp_c')} C | governor {th.get('governor')} "
@@ -658,6 +831,12 @@ def main():
                              "ile alindi; acmak yeni kosulari eskilerle "
                              "karsilastirilamaz yapar (~1.7x yavas). "
                              "IISEC cok-worker icin. Ortam: WESAD_LIMIT_BLAS=1")
+    parser.add_argument('--processes', type=int,
+                        default=int(os.environ.get('WESAD_PROCESSES', '1')),
+                        help="Hesap sureci sayisi. 1 (varsayilan) = ICAIIC'teki "
+                             "tek-worker yolu. N > 1: cikarim + aciklama N alt "
+                             "surece dagitilir; her surec modeli ve aciklayiciyi "
+                             "ayri yukler (bellek ~N kat). Ortam: WESAD_PROCESSES")
     parser.add_argument('--log-every', type=int, default=0,
                         help="Kac pakette bir ilerleme yazilsin (0 = yazma)")
     # Varsayilanlar ortam degiskeninden okunur: Docker'da bayrak gecirmek
