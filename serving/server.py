@@ -776,7 +776,7 @@ async def main_async(args):
     if hw.get('total_ram_mb'):
         print(f"Bellek       : {hw['total_ram_mb']:.0f} MB")
     print(f"Pencere/hop  : {cfg.WINDOW_SIZE} / {cfg.HOP_SIZE} ornek @ {cfg.TARGET_RATE} Hz")
-    if explainer is not None:
+    if state['xai_on']:
         thr = args.xai_threshold
         rule = ("her pencere" if thr >= 1.0 else f"guven < {thr:.2f} olan pencereler")
         print(f"XAI          : {args.xai_method} | {rule} | "
