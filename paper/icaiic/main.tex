@@ -576,10 +576,17 @@ this waiting; we did not measure clients with random phases.\footnote{These runs
 client, is unaffected) and a client whose clock re-synchronisation delayed
 single sends by up to \LoadLagMax\,s; both are fixed in the released code.}
 
-% YER AYRILDI: cok-surecli worker paragrafi ("Several worker processes...")
-% buraya gelecek -- diger oturum kendi makro ve iddia denetimiyle ekleyecek.
-% Su an ~0.6 sutun bos; paragraf sonrasi 7 sayfaya tasarsa yedek kisaltmalar
-% sohbette listeli (III-D ms'leri, V-A asama sayilari, sekil %8, V-E dipnotu).
+\textbf{Several worker processes.} In a separate series on the same Pi
+(SHAP-cheap, performance governor, synchronised clients), a server with
+$k$ worker processes was compared with $k=1$ measured under the same
+conditions. Throughput capacity rose from \MpCapOne to \MpCapTwo and
+\MpCapFour clients for $k=1,2,4$ (\MpGainTwo\x and \MpGainFour\x), but each
+explanation slowed \MpSlowTwo\x and \MpSlowFour\x. Limiting BLAS to one
+thread per process changed explanation time by less than 5\%, which points
+to shared memory bandwidth rather than core count. Processes buy users,
+not latency: four processes kept up with eight clients (95th-percentile
+response \MpFourEightRespPNF\ms), but even an unqueued response took
+\MpFourRespMed\ms.
 
 \subsection{The calibration condition}
 \label{sec:res-calib}
@@ -692,7 +699,8 @@ placement ratio reflects the whole platform, including multithreaded BLAS
 (the board was actively cooled).
 (iv) The gains of gating were measured on one segment with a
 \SelShapCRate\% explanation rate; they scale with the rate.
-(v) One worker per server; the single-vCPU cloud server leaves no room for
+(v) One server per placement, single-process except in
+Sec.~\ref{sec:res-load}; the single-vCPU cloud server leaves no room for
 multithreaded BLAS. (vi) The system replays recorded data at native rates; no user study
 of explanation usefulness was performed.
 

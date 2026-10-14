@@ -58,6 +58,12 @@
 %   [ok] 2 istemci: p95 yanit N*E modeliyle %5 icinde
 %   [ok] 4 istemci: ortalama yanit (N+1)/2*E modeliyle %5 icinde
 %   [ok] 4 istemci: p95 yanit N*E modeliyle %5 icinde
+%   [ok] cok surec: kapasite surecle artiyor ama dogrusal degil
+%   [ok] cok surec: aciklama basina sure surecle uzuyor
+%   [ok] BLAS siniri 4 surec / 4 istemcide aciklama suresini %5'ten az degistirdi
+%   [ok] BLAS siniri 4 surec / 8 istemcide aciklama suresini %5'ten az degistirdi
+%   [ok] 4 surec 8 istemciye yetisti (yuk < 1, p95 yanit < hop)
+%   [ok] 4 surec / 4 istemci: kuyruk yok (<50 ms) ve yanit yine de 2 s ustu
 %   [ok] S11: sicaklik olcekleme ECE'yi kotulestirdi
 %   [ok] S14: sicaklik olcekleme ECE'yi kotulestirdi
 %   [ok] sadakat farklari standart hata cubuklari icinde (cift bazinda)
@@ -663,6 +669,15 @@
 \newcommand{\LoadErrMax}{1.8\xspace}
 \newcommand{\LoadLagMax}{3.7\xspace}
 \newcommand{\LoadExec}{1{,}176\xspace}
+\newcommand{\MpCapOne}{4.4\xspace}  % 18_pi_multiprocess/fog_mp_p1_c4_shapc.json
+\newcommand{\MpCapTwo}{6.9\xspace}  % 18_pi_multiprocess/fog_mp_p2_c4_shapc.json
+\newcommand{\MpGainTwo}{1.6\xspace}
+\newcommand{\MpSlowTwo}{1.3\xspace}
+\newcommand{\MpCapFour}{9.1\xspace}  % 18_pi_multiprocess/fog_mp_p4_c8_shapc.json
+\newcommand{\MpGainFour}{2.1\xspace}
+\newcommand{\MpSlowFour}{1.9\xspace}
+\newcommand{\MpFourEightRespPNF}{4{,}510\xspace}
+\newcommand{\MpFourRespMed}{2{,}195\xspace}
 \newcommand{\AccEleven}{0.952\xspace}  % 08_kalibrasyon/calibration_d1.json
 \newcommand{\ConfEleven}{0.909\xspace}
 \newcommand{\ECEEleven}{0.047\xspace}

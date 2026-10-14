@@ -512,6 +512,49 @@ def main():
     o.put('LoadLagMax', max(load_lag) / 1000, 1)
     o.put('LoadExec', load(PI_DIR, 'fog_pi_load4.json')['pooled']['execution']['mean_ms'], 0)
 
+    # ------------------------------------------------ cok surec (Pi, SHAP-cheap)
+    # iisec-multiprocess dali (server_build v2.4), performance governor. Fig. 3
+    # (ondemand, v2.3) ile KARSILASTIRILMAZ; taban ayni kosulda olculen k=1.
+    # Kapasite her k icin tum sureclerin dolu oldugu kosudan: k * hop / E.
+    MPD = '18_pi_multiprocess'
+    def mp(tag, n):
+        d = load(MPD, f'fog_mp_{tag}_shapc.json')
+        check_kunye(d, tag, 'shap_cheap', 1.0, n_clients=n)
+        if not (d['server'].get('processes') == int(tag[1]) and
+                d['server'].get('server_build') == 'v2.4-multiprocess' and
+                ((d['server'].get('thermal') or {}).get('start') or {}).get('governor')
+                == 'performance'):
+            raise SystemExit(f"[KUNYE] fog_mp_{tag}: surec/surum/governor uyusmuyor")
+        pool = d.get('pooled') or d['metrics']
+        return {'xai': d['server_stages']['xai']['median_ms'],
+                'exec': pool['execution']['mean_ms'], 'que': pool['queuing']['mean_ms'],
+                'resp_med': pool['response']['median_ms'],
+                'resp_p95': pool['response']['p95_ms'],
+                'rss': d['server']['resources']['process_rss_mb']['max'], 'n': n}
+    full = {1: mp('p1_c4', 4), 2: mp('p2_c4', 4), 4: mp('p4_c8', 8)}
+    cap = {k: k * HOP_MS / v['exec'] for k, v in full.items()}
+    for k, w in [(1, 'One'), (2, 'Two'), (4, 'Four')]:
+        o.put(f'MpCap{w}', cap[k], 1, f'{MPD}/fog_mp_p{k}_c{full[k]["n"]}_shapc.json')
+        if k > 1:
+            o.put(f'MpGain{w}', cap[k] / cap[1], 1)
+            o.put(f'MpSlow{w}', full[k]['xai'] / full[1]['xai'], 1)
+    o.claim('cok surec: kapasite surecle artiyor ama dogrusal degil',
+            cap[1] < cap[2] < cap[4] and cap[4] / cap[1] < 4 * 0.75)
+    o.claim('cok surec: aciklama basina sure surecle uzuyor',
+            full[1]['xai'] < full[2]['xai'] < full[4]['xai'])
+    for c in (4, 8):
+        a, b = mp(f'p4_c{c}', c), mp(f'p4b_c{c}', c)
+        o.claim(f'BLAS siniri 4 surec / {c} istemcide aciklama suresini %5\'ten az degistirdi',
+                abs(b['xai'] / a['xai'] - 1) < 0.05)
+    f8 = full[4]
+    o.put('MpFourEightRespPNF', f8['resp_p95'], 0)
+    o.claim('4 surec 8 istemciye yetisti (yuk < 1, p95 yanit < hop)',
+            8 * f8['exec'] / (4 * HOP_MS) < 1 and f8['resp_p95'] < HOP_MS)
+    q4 = mp('p4_c4', 4)
+    o.put('MpFourRespMed', q4['resp_med'], 0)
+    o.claim('4 surec / 4 istemci: kuyruk yok (<50 ms) ve yanit yine de 2 s ustu',
+            q4['que'] < 50 and q4['resp_med'] > 2000)
+
     # ------------------------------------------------ kalibrasyon (model ozelligi)
     cal = load('08_kalibrasyon', 'calibration_d1.json')
     for s, S in [('S11', 'Eleven'), ('S14', 'Fourteen')]:
