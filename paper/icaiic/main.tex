@@ -50,20 +50,21 @@ systematic reviews of XAI evaluation exclude run time from their scope,
 studies that explain such classifiers report accuracy without explanation
 time, and deployment studies of physiological monitoring measure transport
 metrics without explanations. We deploy a frozen \NParams-parameter 1D-CNN trained
-on WESAD as a TCP client--server system, run its server either co-located
-with the client on a laptop or on a Raspberry~Pi~4 fog node, and measure
-the seven metrics used in fog-computing studies with an open-loop sensor
-client and drift-corrected clock synchronisation. Without explanation, the
-server pipeline takes a median of \ColocNoneExecMed\ms per 10\,s window on
-the laptop and \FogNoneExecMed\ms on the Pi. A single region-based LIME or
-SHAP (GradientExplainer) explanation takes a median of
-\ColocXaiMin--\ColocXaiMax\ms on the laptop (four operating points) and
-\FogXaiMin--\FogXaiMax\ms on the Pi (\FogNPoints operating points),
-i.e.\ \XaiShareMin--\XaiShareMax\% of the execution time. The median one-way
-network latency is at most \LatMaxAll\ms, whereas the Pi is
-\FogOverColocXaiLimeC\x slower per explanation for LIME with 250 samples
-and \FogOverColocXaiShapC\x slower for SHAP with 50 samples, and every
-response of the latter exceeds the 1\,s real-time bound. On a
+on WESAD as a TCP client--server system, run its server co-located with
+the client on a laptop, on a Raspberry~Pi~4 fog node and on a cloud VPS,
+and measure the seven metrics used in fog-computing studies with an
+open-loop sensor client and drift-corrected clock synchronisation.
+Without explanation the server pipeline takes a median of
+\ColocNoneExecMed\ms per 10\,s window on the laptop and \FogNoneExecMed\ms
+on the Pi; a single region-based LIME or SHAP (GradientExplainer)
+explanation takes \ColocXaiMin--\ColocXaiMax\ms and
+\FogXaiMin--\FogXaiMax\ms respectively,
+\XaiShareMin--\XaiShareMax\% of the execution time. LAN latency stays
+below \LatMaxAll\ms and the Internet path adds
+\CloudNetMin--\CloudNetMax\ms each way, whereas the Pi is
+\FogOverColocXaiLimeC--\FogOverColocXaiShap\x slower per explanation
+than the laptop and every SHAP-cheap response on the Pi exceeds the 1\,s
+real-time bound: under explanation, placement is a compute decision. On a
 \SelMinutes-minute segment in which \SelShapCRate\% of windows had
 confidence below 0.80, explaining only those windows reduced the mean
 execution time \SelExecGainMin--\SelExecGainMax\x and raised the throughput
@@ -93,8 +94,8 @@ evaluation explicitly excludes run time from its scope~\cite{nauta2023},
 and recent work that explains stress classifiers trained on WESAD reports
 neither inference nor explanation time~\cite{almadhor2025}. In a real-time
 monitor, a new 10\,s window arrives every 5\,s, and
-the time spent explaining one window is unavailable to the next window and
-to other users of the same server.
+the time spent explaining one window is unavailable to the next window
+and to other users.
 
 Fog-computing studies of physiological monitoring measure precisely such
 system-level quantities---latency, queuing delay, execution time, response
@@ -138,7 +139,6 @@ points (Secs.~\ref{sec:res-calib}, \ref{sec:res-quality}).
 \midrule
 Erzurumluo\u{g}lu et al.~\cite{erzurumluoglu2025} & EEG+ECG (DREAMER) & RF & -- & -- & edge, fog (Pi\,4), cloud & \checkmark{} (7 metrics) & --\\
 Tuli et al.~\cite{tuli2020healthfog} & cardiac data & DL ensemble & -- & -- & edge, fog, cloud & \checkmark & --\\
-Gia et al.~\cite{gia2015} & ECG & wavelet feat. & -- & -- & fog gateway & \checkmark & --\\
 Almadhor et al.~\cite{almadhor2025} & WESAD (+2 sets) & 1D-CNN & \checkmark & -- & -- & -- & --\\
 El~Rashidy et al.~\cite{elrashidy2025} & facial & CNN, YOLOv8 & LIME, Grad-CAM & -- & fog & frame rate only & --\\
 Ghose et al.~\cite{ghose2025} & HRV (SWELL-KW) & classical ML & LIME & -- & edge (Jetson) & training time only & --\\
@@ -156,14 +156,12 @@ Raspberry~Pi~4 fog worker and report the seven transport and resource
 metrics we adopt.
 Further fog health systems measure latency, energy, bandwidth and
 execution time, again without
-explanations~\cite{tuli2020healthfog,gia2015}. Conversely, studies that do attach
-explanations to such systems do not time them (Table~\ref{tab:lit}): a fog
-architecture with LIME and Grad-CAM for facial emotion recognition
-reports inference throughput but not the cost of producing an
-explanation~\cite{elrashidy2025}, a WESAD-trained 1D-CNN with
-explanations reports no times at all~\cite{almadhor2025}, and a
-LIME-based stress detector on a Jetson Orin Nano reports training times
-only~\cite{ghose2025}.
+explanations~\cite{tuli2020healthfog,gia2015}. Conversely, studies that attach explanations to such systems do not
+time them (Table~\ref{tab:lit}): LIME and Grad-CAM in a fog emotion
+recogniser report throughput only~\cite{elrashidy2025}, a WESAD-trained
+1D-CNN with explanations reports no times~\cite{almadhor2025}, and a
+LIME-based stress detector on a Jetson edge device reports training
+times only~\cite{ghose2025}.
 
 \textbf{The cost of explanation.} ShaTS~\cite{shats2025} states an explicit
 real-time criterion---an explainer that needs more than 1\,s per window is
@@ -179,13 +177,12 @@ prediction in a cold-chain monitoring deployment~\cite{taguta2026}.
 established for inference through early exits~\cite{teerapittayanon2017}
 and confidence cascades~\cite{berestizshevsky2018}, and has been proposed
 for explanations as budgeted selective explanation~\cite{paes2024} and as
-explanations of rejected samples~\cite{artelt2023}. We do not claim the
-mechanism. We characterise it end to end in continuous physiological
+explanations of rejected samples~\cite{artelt2023}. We claim not the
+mechanism but its end-to-end characterisation in continuous physiological
 monitoring on constrained hardware, where its benefit depends on
-calibration~\cite{guo2017}. Table~\ref{tab:lit} positions this work: no
-study in the set measures explanation time inside a deployed pipeline
-together with the transport metrics, or gates explanations on model
-confidence.
+calibration~\cite{guo2017}. Table~\ref{tab:lit} positions this work: none
+of the studies times explanations inside a deployed pipeline with the
+transport metrics, or gates them on confidence.
 
 % ======================================================================
 \section{System and Measurement Method}
@@ -233,25 +230,22 @@ pooling and two dense layers (\NParams parameters), trained with focal
 loss~\cite{lin2017} on 14 chest and wrist channels resampled to 64\,Hz, in
 10\,s windows with a 5\,s hop. The architecture reaches 0.92 F1 under
 15-fold leave-one-subject-out (LOSO) validation. % OFFLINE
-The window and the architecture were fixed in preliminary offline
-experiments. Window lengths of 1, 30 and 60\,s reached F1
-scores of 0.816--0.863 there, against the 0.92 of the adopted 10\,s
+Both were fixed in preliminary offline experiments: window lengths of 1,
+30 and 60\,s reached F1 0.816--0.863 against 0.92 for the adopted 10\,s
 configuration,
 % OFFLINE: docs/refs/tez_pencere_taramasi_cnn.png (1 s: 81.58, 30 s:
 % 86.29, 60 s: 83.03; 50% overlap). 0.92 = balanced 10 s run (LOSO).
-and the deployed network was then
-selected by a one-factor-at-a-time sweep over depth, filter widths and
-kernel size that scored every candidate by LOSO F1 together with
-per-window inference time: the selected two-block network reached a higher
-sweep F1 than the 105K-parameter three-block baseline (0.931 against
-0.927) in two thirds of the baseline's inference time.
+and a one-factor-at-a-time sweep over depth, filters and kernel size,
+scored by LOSO F1 and per-window inference time, preferred the two-block
+network to the 105K-parameter baseline (F1 0.931 vs.\ 0.927 at two
+thirds of the inference time).
 % OFFLINE: docs/refs/offline_sonuclar_30agustos.pdf --
 % depth2 [32,128] k9: 49,890 params, ~0.61 ms, F1 0.9307;
 % baseline [32,64,128] k9: ~105K, ~0.89 ms, F1 0.9271.
 The deployed checkpoint was trained on 13 subjects; the remaining two, S11
 and S14, served as the validation set for checkpoint selection (validation
-F1 \ValFOne under offline, full-record normalisation). They were never used
-for training, but they are not independent test subjects; all measurements
+F1 \ValFOne under offline, full-record normalisation). Never used for
+training, they are still not independent test subjects; all measurements
 below are taken on them. The model is frozen and used unchanged throughout.
 
 \subsection{Real-time pipeline}
@@ -263,9 +257,8 @@ subject with statistics of the complete record, which uses future data;
 the server instead normalises causally (Welford's algorithm on the data
 seen so far). Under this constraint the deployed model reaches \RtAcc
 accuracy and \RtFOne stress F1 over \RtN labelled windows of S11 and S14 in
-an offline replay, and \SelAcc accuracy and \SelFOne stress F1 over
-\SelNLab labelled windows of the first \SelMinutes minutes of S11 on the
-fog node.
+an offline replay, and \SelAcc/\SelFOne over \SelNLab labelled windows
+of the first \SelMinutes minutes of S11 on the fog node.
 
 \subsection{Transport and measurement}
 \label{sec:transport}
@@ -284,11 +277,10 @@ usage is the mean CPU utilisation and peak resident memory (RSS) of the
 server process. Nagle's algorithm is disabled (\texttt{TCP\_NODELAY}, the
 default of Python's asyncio).
 
-\textbf{Open-loop load.} A client that waits for each reply before sending
-the next tick is a \emph{closed} load generator. When an explanation takes
-longer than one tick, the emulated sensor pauses and the waiting time is
-omitted from the measurement, which is the coordinated-omission problem of
-closed-loop benchmarking~\cite{schroeder2006}. In a check with the
+\textbf{Open-loop load.} A client that waits for each reply before the
+next tick is a \emph{closed} load generator: when an explanation outlasts
+a tick, the emulated sensor pauses and the waiting is omitted from the
+measurement---the coordinated-omission problem~\cite{schroeder2006}. In a check with the
 200-sample SHAP explainer, a closed-loop client delayed its sends by
 \LoopClosedLagPNF\ms at the 95th percentile. Our client is
 open-loop---a sender task emits every tick on schedule, independently of
@@ -311,22 +303,20 @@ fitted by ridge regression. We use 500 samples (\emph{LIME}) and 250
 samples (\emph{LIME-cheap}). \textbf{SHAP.} SHAP's GradientExplainer
 (expected gradients~\cite{erion2021}) with a fixed 100-window $k$-means
 background drawn from training subjects in the causal input space, using
-200 samples (\emph{SHAP}) and 50 samples (\emph{SHAP-cheap}). These
+200 samples (\emph{SHAP}) and 50 samples (\emph{SHAP-cheap}). The
 operating points come from a one-factor-at-a-time sweep in the same
-preliminary experiments over LIME's sample count, segment count and kernel
-width, and over SHAP's background size, sample count and background-summary
-method, with every setting scored by faithfulness, monotonicity,
-sensitivity and latency; within that sweep, the cheap sample counts kept
-the quality score within 4.9\% (LIME) and 1.4\% (SHAP) of the best setting
-while running 2.3\x and 8.6\x faster than the largest sample counts tried.
+experiments over LIME's sample count, segments and kernel width and
+SHAP's background size, samples and summary method, each setting scored
+by faithfulness, monotonicity, sensitivity and latency; the cheap sample
+counts kept quality within 4.9\% (LIME) and 1.4\% (SHAP) of the best
+setting at 2.3\x and 8.6\x the speed of the largest tried.
 % OFFLINE: docs/refs/offline_sonuclar_30agustos.pdf (LIME samples250:
 % -4.9%, 2.3x; SHAP nsamples50: -1.4%, 8.6x).
-A cheap point thus runs the same algorithm with a smaller sample count,
-and its cost scales with that count: on the laptop, halving LIME's samples
-gives \ColocLimeCXaiMed against \ColocLimeXaiMed\ms per explanation and
-quartering SHAP's gives \ColocShapCXaiMed against \ColocShapXaiMed\ms
-(Table~\ref{tab:profile}), with no measurable faithfulness difference
-between the four points (Sec.~\ref{sec:res-quality}). The
+A cheap point runs the same algorithm with fewer samples and costs
+proportionally less (\ColocLimeCXaiMed vs.\ \ColocLimeXaiMed\ms for
+LIME and \ColocShapCXaiMed vs.\ \ColocShapXaiMed\ms for SHAP on the
+laptop; Table~\ref{tab:profile}), with no measurable faithfulness
+difference (Sec.~\ref{sec:res-quality}). The
 GradientExplainer is not KernelSHAP, whose cost structure
 differs~\cite{warnecke2020}.
 All random seeds are fixed, and explainers are warmed up when the server
@@ -344,28 +334,27 @@ and $\tau=1$ always explains.
 
 \begin{table}[t]
 \caption{Placements and software. The same PyTorch release runs on all
-servers; the cloud placement is described in the text.}
+servers.}
 \label{tab:placements}
-\centering\footnotesize
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}p{1.25cm}p{3.3cm}p{3.25cm}@{}}
+\centering\scriptsize
+\setlength{\tabcolsep}{2.3pt}
+\begin{tabular}{@{}p{0.9cm}p{2.5cm}p{2.5cm}p{2.3cm}@{}}
 \toprule
-& \textbf{Co-located (laptop)} & \textbf{Fog}\\
+& \textbf{Co-located (laptop)} & \textbf{Fog} & \textbf{Cloud}\\
 \midrule
-Hardware & Intel Core 13th gen.\ (Raptor Lake), \ColocCores logical cores & \FogModel (rev.\ \FogRev), \FogCores\x Cortex-A72, \FogGHz\,GHz\\
-Memory   & \ColocRAM\,GB & \FogRAM\,GB\\
-OS       & Windows 11 & Raspberry Pi OS 64-bit (Debian 13)\\
-Software & Python \ColocPy, PyTorch \ColocTorch, SHAP \ColocShapVer & Python \FogPy, PyTorch \FogTorch, SHAP \FogShapVer\\
-Link     & loopback & LAN; Pi connected by Ethernet\\
-CPU gov. & default (Windows) & performance; on-demand in Secs.~\ref{sec:res-selective}--\ref{sec:res-load}\\
+Hardware & Intel Core 13th gen.\ (Raptor Lake), \ColocCores logical cores & \FogModel (rev.\ \FogRev), \FogCores\x Cortex-A72, \FogGHz\,GHz & DigitalOcean VPS, \CloudCores shared vCPU\\
+Memory   & \ColocRAM\,GB & \FogRAM\,GB & \CloudRAM\,GB\\
+OS       & Windows 11 & Raspberry Pi OS 64-bit (Debian 13) & Linux; Docker container\\
+Software & Python \ColocPy, PyTorch \ColocTorch, SHAP \ColocShapVer & Python \FogPy, PyTorch \FogTorch, SHAP \FogShapVer & Python \CloudPy, PyTorch \CloudTorch, SHAP \CloudShapVer\\
+Link     & loopback & LAN; Pi on Ethernet & Internet\\
+CPU gov. & default (Windows) & performance; on-demand in Secs.~\ref{sec:res-selective}--\ref{sec:res-load} & n/a (shared vCPU)\\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Placements} (Table~\ref{tab:placements}). In the \emph{co-located}
-placement the client and the server run as separate processes on the same
-laptop and communicate over loopback; this is the lowest-latency placement
-available, not a wearable device. In the \emph{fog} placement the server
+\textbf{Placements} (Table~\ref{tab:placements}). \emph{Co-located},
+client and server run as separate processes on the same laptop over
+loopback---the lowest-latency placement, not a wearable. In the \emph{fog} placement the server
 runs on a Raspberry~Pi~4 Model~B with active cooling---the same board
 model as the fog worker of~\cite{erzurumluoglu2025}, with \FogRAM\,GB of
 memory and a \FogGHz\,GHz part against their 8\,GB at 1.8\,GHz. The
@@ -374,20 +363,17 @@ VPS (Python \CloudPy, SHAP \CloudShapVer) reached over the Internet.
 
 \textbf{Protocol.} All single-client runs replay subject S11 in real time
 with causal normalisation; the first 15 windows of every client are
-discarded as warm-up. Each configuration is measured in one run. The
-single-client profile of the Pi (Table~\ref{tab:profile}) was measured with
-the CPU governor set to \emph{performance}; the selective and multi-client
-runs used the default \emph{on-demand} governor and are compared only with
-always-explain runs under the same governor. Fixed-policy runs (no explanation, or explanation of every window) last
+discarded as warm-up. Each configuration is measured in one run; the
+CPU governor of each Pi run is stated with the result
+(Sec.~\ref{sec:res-gov}). Fixed-policy runs (no explanation, or explanation of every window) last
 \AlwMinutes minutes (\FogNoneN windows, the stress-free baseline segment
 of the record); selective runs last \SelMinutes minutes (\SelShapCN
 windows, spanning baseline and stress); multi-client runs replay S11 and
 S14 alternately for 5 minutes. The 10\,s window is the length the model
 was trained with, and the 5\,s hop reproduces the 50\% window overlap of
-training. We define the
-\emph{throughput capacity} of a worker as the hop divided by the mean
-execution time: the number of clients it can keep up with, regardless of
-how long an individual response takes.
+training. We define the \emph{throughput capacity} of a worker as the hop divided
+by the mean execution time: the number of clients it keeps up with,
+irrespective of individual response times.
 
 % ======================================================================
 \section{Results}
@@ -402,7 +388,7 @@ Median queuing delay $\le$\,\QueMaxAll\ms and bandwidth
 $\approx$\,\KbpsAll\,kbps everywhere. $^\dagger$Cloud: half of response
 minus execution (clock offset too uncertain).}
 \label{tab:profile}
-\centering\footnotesize
+\centering\scriptsize
 \setlength{\tabcolsep}{4.5pt}
 \begin{tabular}{@{}ll rrr rrr rr@{}}
 \toprule
@@ -439,9 +425,8 @@ Cloud      & none       & \CloudNoneNet$^\dagger$ & \CloudNoneExecMed & -- & \Cl
 \centering
 \includegraphics[width=\columnwidth]{fig_cost.pdf}
 \caption{Median response time per window by explainer and placement, one
-client (tick = 95th percentile; generated from the same runs as
-Table~\ref{tab:profile}). The 1\,s line is the real-time criterion
-of~\cite{shats2025}; the 5\,s line is the hop.}
+client (tick = p95; same runs as Table~\ref{tab:profile}). The 1\,s line
+is the real-time criterion of~\cite{shats2025}; the 5\,s line the hop.}
 \label{fig:cost}
 \end{figure}
 
@@ -451,12 +436,11 @@ Table~\ref{tab:profile} and Fig.~\ref{fig:cost} profile every
 configuration. Without explanation,
 the server spends a median of \ColocNoneExecMed\ms per window on the
 laptop and \FogNoneExecMed\ms on the Pi, well under 1\% of the 5\,s hop.
-On the Pi this divides into \FogNoneResamp\ms for resampling the native
-streams to 64\,Hz, \FogNonePrep\ms for causal normalisation,
-\FogNoneTensor\ms for tensor preparation, \FogNoneInf\ms for inference and
-\FogNonePost\ms for post-processing (stage medians); the laptop profile
-has the same composition with \ColocNoneInf\ms of inference, so every
-stage of the pipeline fits the real-time budget on both nodes. A single
+On the Pi this divides into \FogNoneResamp\ms of resampling to 64\,Hz,
+\FogNonePrep\ms of causal normalisation, \FogNoneTensor\ms of tensor
+preparation, \FogNoneInf\ms of inference and \FogNonePost\ms of
+post-processing (stage medians; the laptop profile has the same
+composition), so every stage fits the real-time budget on both nodes. A single
 explanation costs a median of \ColocXaiMin--\ColocXaiMax\ms on the laptop
 and \FogXaiMin--\FogXaiMax\ms on the Pi and accounts for
 \XaiShareMin--\XaiShareMax\% of execution time in every explained
@@ -486,23 +470,32 @@ meet the real-time criterion of~\cite{shats2025} on the laptop, but on the
 Pi only LIME-cheap does (95th percentile \FogLimeCRespPNF\ms): every
 SHAP-cheap response exceeds 1\,s (minimum \FogShapCRespMin\ms), and so does
 the median LIME response (\FogLimeRespMed\ms)\ifpishapfull{} and the
-median SHAP response (\FogShapRespMed\ms)\fi. Under explanation, the
-placement decision is therefore a decision about the compute capability of
-the node.
+median SHAP response (\FogShapRespMed\ms)\fi. Under explanation, placement is therefore a decision about the compute
+capability of the node.
 
-Two observations on the Pi qualify these numbers. First, the CPU governor
-matters for light workloads. Under the default on-demand governor,
-inference took a median of \FogInfIdle\ms in the run without explanation
-but \FogInfBusy\ms in runs where explanations kept the CPU busy. With the
-performance governor the difference disappears (\FogInfPerf versus
-\FogInfBusyPerf\ms), and the execution time without explanation falls from
-\FogODNoneExecMed to \FogNoneExecMed\ms (\FogGovGain\x), while explanation
-time changes by at most \FogGovXaiLimeC\%. An idle fog node is thus slower
-than its peak speed for the cheap requests that dominate when
-explanations are rare. Second, LIME-cheap used on
+One caveat on these ratios: LIME-cheap used on
 average \FogLimeCCores cores of the Pi while busy (mean CPU \FogLimeCCPU\%
 against a busy fraction of \FogLimeCBusy\%), because of multithreaded BLAS;
 a single-threaded LIME would be slower.
+
+\subsection{Frequency scaling on the fog node}
+\label{sec:res-gov}
+
+The Pi was measured under both of its CPU governors, and the difference
+separates the light from the heavy parts of the pipeline.
+Under the default on-demand governor, inference took a median of
+\FogInfIdle\ms in the run without explanation but \FogInfBusy\ms in runs
+where explanations kept the CPU busy; under the performance governor the
+difference disappears (\FogInfPerf versus \FogInfBusyPerf\ms), the no-XAI
+execution falls from \FogODNoneExecMed to \FogNoneExecMed\ms
+(\FogGovGain\x), and the explanation times change by at most
+\FogGovXaiLimeC\%. An idle fog node is thus slower than its peak speed for
+precisely the cheap requests that dominate when explanations are rare,
+whereas the explanations saturate the clock under either governor.
+Table~\ref{tab:profile} therefore uses the performance governor; the
+selective and multi-client runs (Table~\ref{tab:selective},
+Fig.~\ref{fig:load}) ran under on-demand, compared only with
+always-explain runs under the same governor.
 
 \subsection{Selective explanation on the fog node}
 \label{sec:res-selective}
@@ -543,15 +536,14 @@ SHAP-cheap window still exceeds 1\,s and every explained LIME-cheap
 window stays below it, so gating reduces the average load, not the
 latency of an explained window.
 
-Because both component costs carry over unchanged, the mean execution time
-of a selective run follows from them: the mean without explanation plus
-the explanation rate times the mean explanation time gives
-\SelLimeCProjExec and \SelShapCProjExec\ms against the measured
-\SelLimeCExecMean and \SelShapCExecMean\ms (about \SelProjErrRound\%
-error). Other thresholds can thus be projected from the explanation rate
-and the per-explanation cost. The rate itself depends on the segment: over
-the labelled windows of the complete S11 record, the offline replay
-explains \RateElevenEighty\% at the same threshold.
+Because both component costs carry over unchanged, the mean of a
+selective run follows from them: no-explanation mean plus rate times
+per-explanation mean gives \SelLimeCProjExec and \SelShapCProjExec\ms
+against the measured \SelLimeCExecMean and \SelShapCExecMean\ms (about
+\SelProjErrRound\% error), so other thresholds can be projected from the
+rate and the per-explanation cost. The rate depends on the segment: over
+the labelled windows of the full S11 record, the offline replay explains
+\RateElevenEighty\% at the same threshold.
 
 \subsection{Several users on one fog worker}
 \label{sec:res-load}
@@ -568,10 +560,8 @@ run's mean execution time.}
 \end{figure}
 
 One, two and four clients were run against the Pi with SHAP-cheap on
-every window (44 measured windows per client, pooled over clients; the
-on-demand governor, as in Table~\ref{tab:selective}). The clients start
-together, so their windows complete at the same instants and their
-explanations are served back to back: with $N$ clients and mean execution
+every window (44 windows per client, pooled; on-demand governor). Started together, the clients' windows complete at the same instants and
+their explanations queue back to back: with $N$ clients and mean execution
 time $E$ of the run, the response of the $k$-th client served is about
 $kE$, the mean response is $(N+1)E/2$, and the 95th percentile approaches
 $NE$. The measurements agree with this model within \LoadErrMax\%
@@ -585,6 +575,11 @@ this waiting; we did not measure clients with random phases.\footnote{These runs
 (waiting appeared as latency, not queuing; response time, measured on the
 client, is unaffected) and a client whose clock re-synchronisation delayed
 single sends by up to \LoadLagMax\,s; both are fixed in the released code.}
+
+% YER AYRILDI: cok-surecli worker paragrafi ("Several worker processes...")
+% buraya gelecek -- diger oturum kendi makro ve iddia denetimiyle ekleyecek.
+% Su an ~0.6 sutun bos; paragraf sonrasi 7 sayfaya tasarsa yedek kisaltmalar
+% sohbette listeli (III-D ms'leri, V-A asama sayilari, sekil %8, V-E dipnotu).
 
 \subsection{The calibration condition}
 \label{sec:res-calib}
@@ -620,10 +615,9 @@ explanation rates are similar (\RateElevenEighty\% and
 S14's \ErrorsFourteenEighty, because S14 is often wrong with high
 confidence. Temperature scaling fitted on the other subject made
 calibration worse for both (ECE \ECEtsEleven and \ECEtsFourteen), since the
-two subjects are miscalibrated in opposite directions. The cost reduction
-of gating does not depend on calibration, whereas its error coverage does;
-with two subjects we report this as an observation, which motivates
-per-user calibration.
+two subjects are miscalibrated in opposite directions. The cost reduction of gating is calibration-independent, its error
+coverage is not---an observation on two subjects that motivates per-user
+calibration.
 
 \subsection{Explainer quality versus cost}
 \label{sec:res-quality}
@@ -656,9 +650,9 @@ not depend on the hardware. No operating point dominates in faithfulness:
 for every pair the difference is smaller than the sum of the standard
 errors (Table~\ref{tab:quality}). The explainers differ in stability
 instead: under small input noise, LIME's attributions change \SensRatio\x
-less than those of SHAP. The cheap operating points lose no measurable
-faithfulness. Since LIME-cheap is also the faster explainer on the Pi
-(Sec.~\ref{sec:res-place}), it is both the cheaper and the more stable
+less than those of SHAP, and the cheap points lose no measurable
+faithfulness. Being also the faster explainer on the Pi
+(Sec.~\ref{sec:res-place}), LIME-cheap is both the cheaper and the more stable
 choice on the fog node.
 
 % ======================================================================
@@ -666,10 +660,9 @@ choice on the fog node.
 % ======================================================================
 
 \textbf{Where the architectural decision moves.} Without explanation, all
-placements answer well within the hop, and placement changes response time
-by tens of milliseconds at most---the same order as the differences
-between the edge, fog and cloud placements of~\cite{erzurumluoglu2025}
-(mean response times 22.5, 43.3 and 73.3\ms). With explanation, two other
+placements answer well within the hop; placement changes response time by
+tens of milliseconds at most, as between the edge, fog and cloud
+placements of~\cite{erzurumluoglu2025} (22.5, 43.3, 73.3\ms mean). With explanation, two other
 parameters dominate: the compute capability of the node, which changes the
 cost of an explanation by up to \FogOverColocXaiShap\x, and the triggering
 policy, which changes the mean cost by
@@ -695,8 +688,8 @@ between placements, \SelExecGainMin--\SelExecGainMax\x from gating) are far
 larger. (iii) The placements share the PyTorch release but differ in
 processor architecture, operating system, Python and SHAP version; the
 placement ratio reflects the whole platform, including multithreaded BLAS
-(Sec.~\ref{sec:res-place}). The Pi runs used a server build that did not
-log temperature or throttling state; the board was actively cooled.
+(Sec.~\ref{sec:res-place}); Pi server builds logged no thermal state
+(the board was actively cooled).
 (iv) The gains of gating were measured on one segment with a
 \SelShapCRate\% explanation rate; they scale with the rate.
 (v) One worker per server; the single-vCPU cloud server leaves no room for
@@ -715,8 +708,7 @@ one second. Confidence-gated explanation reduced the mean cost
 \SelExecGainMin--\SelExecGainMax\x on a segment where \SelShapCRate\% of
 windows were explained and raised the throughput capacity of a fog worker
 by a similar factor, but it directs explanations to errors only where the
-model is calibrated. The measurement harness, including the open-loop
-client and drift-corrected clock synchronisation, will be made publicly
+model is calibrated. The measurement harness will be made publicly
 available.
 
 % ======================================================================

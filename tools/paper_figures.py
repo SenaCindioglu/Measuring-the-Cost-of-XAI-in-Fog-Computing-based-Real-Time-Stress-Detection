@@ -25,7 +25,10 @@ COLOC = {'none': 'coloc_none', 'shap_cheap': 'coloc_shap_cheap',
 FOG = {'none': 'fog_pi_none_perf', 'shap_cheap': 'fog_pi_shap_perf',
        'lime_cheap': 'fog_pi_lime_perf', 'lime': 'fog_pi_lime_full_perf',
        'shap': 'fog_pi_shap_full_perf'}
-CLOUD = {m: f'cloud_{m}' for m in FOG}
+CLOUD = {'none': 'fog_cloud_baseline_retry1',
+         'shap_cheap': 'fog_cloud_xai_shap_ucuz',
+         'lime_cheap': 'fog_cloud_xai_limeucuz',
+         'lime': 'fog_cloud_xai_lime', 'shap': 'fog_cloud_xai_shap'}
 ORDER = ['none', 'shap_cheap', 'lime_cheap', 'lime', 'shap']
 LABEL = {'none': 'no explanation', 'shap_cheap': 'SHAP-cheap',
          'lime_cheap': 'LIME-cheap', 'lime': 'LIME', 'shap': 'SHAP'}
@@ -49,11 +52,11 @@ def fig_cost():
     for m in ORDER:
         c = med_resp('16_coloc', COLOC[m])
         g = med_resp('16_pi_perf', FOG[m])
-        k = med_resp('17_cloud_v2', CLOUD[m])
+        k = med_resp('17_bulut_openloop', CLOUD[m])
         rows.append((LABEL[m], c, g, k))
 
     has_cloud = any(r[3] for r in rows)
-    fig, ax = plt.subplots(figsize=(3.4, 2.3 if has_cloud else 2.0))
+    fig, ax = plt.subplots(figsize=(3.4, 2.02 if has_cloud else 1.85))
     y = range(len(rows))
     h = 0.27 if has_cloud else 0.38
     # y ekseni ters: negatif ofset ustte; cubuklar etiket etrafinda ortali
@@ -107,7 +110,7 @@ def fig_load():
 
     xs = range(len(ns))
     w = 0.32
-    fig, ax = plt.subplots(figsize=(3.4, 1.62))
+    fig, ax = plt.subplots(figsize=(3.4, 1.52))
     ax.bar([x - w / 2 for x in xs], meas_mean, w, color='#8dafd4',
            edgecolor='black', linewidth=0.4, label='mean, measured')
     ax.bar([x + w / 2 for x in xs], meas_p95, w, color='#c0504d',
@@ -128,6 +131,61 @@ def fig_load():
     ax.spines[['top', 'right']].set_visible(False)
     fig.tight_layout(pad=0.2)
     path = os.path.join(OUT, 'fig_load.pdf')
+    fig.savefig(path, bbox_inches='tight')
+    print('[i]', path)
+
+
+def fig_governor():
+    """Pi'de ondemand ve performance governor karsilastirmasi: ayni
+    asamalarin medyan sureleri (fig_cost stilinde yatay cubuk, log eksen)."""
+    def grab(sub, files):
+        out = {}
+        for key, fn in files.items():
+            with open(os.path.join(R, sub, fn + '.json')) as f:
+                d = json.load(f)
+            st = d['server_stages']
+            out[key] = {'exec': d['metrics']['execution']['median_ms'],
+                        'inf': st['inference']['median_ms'],
+                        'xai': st['xai']['median_ms'] if 'xai' in st else None}
+        return out
+
+    od = grab('15_pi_ondemand', {'none': 'fog_pi_none',
+                                 'lime_cheap': 'fog_pi_lime',
+                                 'shap_cheap': 'fog_pi_shap'})
+    pf = grab('16_pi_perf', {'none': 'fog_pi_none_perf',
+                             'lime_cheap': 'fog_pi_lime_perf',
+                             'shap_cheap': 'fog_pi_shap_perf'})
+
+    def busy_inf(t):
+        a, b = t['lime_cheap']['inf'], t['shap_cheap']['inf']
+        return (a + b) / 2
+
+    rows = [
+        ('pipeline, no XAI',        od['none']['exec'],       pf['none']['exec']),
+        ('inference (idle run)',    od['none']['inf'],        pf['none']['inf']),
+        ('inference (busy runs)',   busy_inf(od),             busy_inf(pf)),
+        ('LIME-cheap explanation',  od['lime_cheap']['xai'],  pf['lime_cheap']['xai']),
+        ('SHAP-cheap explanation',  od['shap_cheap']['xai'],  pf['shap_cheap']['xai']),
+    ]
+
+    fig, ax = plt.subplots(figsize=(3.4, 1.42))
+    h = 0.36
+    for i, (lab, v_od, v_pf) in enumerate(rows):
+        ax.barh(i - h / 2, v_od, height=h, color='#b8b8b8',
+                edgecolor='black', linewidth=0.4,
+                label='on-demand governor' if i == 0 else None)
+        ax.barh(i + h / 2, v_pf, height=h, color='#8dafd4',
+                edgecolor='black', linewidth=0.4,
+                label='performance governor' if i == 0 else None)
+    ax.set_xscale('log')
+    ax.set_xlim(4, 2600)
+    ax.set_yticks(range(len(rows)), [r[0] for r in rows])
+    ax.invert_yaxis()
+    ax.set_xlabel('median time on the Pi (ms, log scale)')
+    ax.legend(loc='upper right', frameon=False, fontsize=7)
+    ax.spines[['top', 'right']].set_visible(False)
+    fig.tight_layout(pad=0.2)
+    path = os.path.join(OUT, 'fig_governor.pdf')
     fig.savefig(path, bbox_inches='tight')
     print('[i]', path)
 
